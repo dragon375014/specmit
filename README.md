@@ -63,7 +63,7 @@ skills/pipeline-runner/       L3b — bridge skill (trigger + pre-flight + write
 
 ## Ecosystem
 
-This repo is the **execution rail** of the five(+1)-repo toolchain — full map: [ai-dev-toolkit/ECOSYSTEM.md](https://github.com/dragon375014/ai-dev-toolkit/blob/main/ECOSYSTEM.md).
+This repo is the **execution rail** of the six-repo toolchain — full map: [ai-dev-toolkit/ECOSYSTEM.md](https://github.com/dragon375014/ai-dev-toolkit/blob/HEAD/ECOSYSTEM.md).
 Upstream: [spec-sonar](https://github.com/dragon375014/spec-sonar) (formats), [goal-workflow-designer](https://github.com/dragon375014/goal-workflow-designer) (single-task depth + homogeneous breadth — heterogeneous goal graphs belong here). Execution-time: [claude-skills-governance-meta](https://github.com/dragon375014/claude-skills-governance-meta) (gates, enforced in the executor prompt), [agent-work-board](https://github.com/dragon375014/agent-work-board) (multi-session claims, in the bridge's pre-flight).
 
 ## Publication gate
