@@ -35,6 +35,49 @@ description: |
 2. 抽查 `goals[].file` 指到的檔案存在（缺檔 → 停，回 goal-decomposer 重生成）
 3. 多 session 環境（repo 有 WORK-BOARD.md）→ 先掃「進行中」確認 `projectDir` 沒人認領，並加一列認領
 
+## Step 1.5 — Pre-flight 簡報（輸出後立刻進 Step 2，不等使用者回覆）
+
+讀 `project_setup` 欄位 + goal 統計，輸出以下格式，**然後立刻 call Workflow()**——使用者在 pipeline 跑的時候去準備，兩邊平行：
+
+```
+🚀 [專案名稱] — 管線啟動中
+
+📋 請你在 pipeline 跑的時候同步完成：
+
+① 申請帳號（手動，只能你去做）：
+   • [服務] → [url]（[note]）
+
+② 填入 .env（key 準備好後手動填）：
+   • [KEY_NAME]  ← 哪裡找：[where]
+   （若 .env 已存在且有這些 key，可略過）
+
+⏱ 預估執行時間：約 X–Y 分鐘
+💰 預估費用：約 $A–$B USD（Sonnet 基準 ±50%）
+📊 [N] goals / [B] 批次 / haiku×[h] sonnet×[s] opus×[o]
+
+▶ 管線啟動中，以上事項請並行處理...
+```
+
+**若 `project_setup` 不存在**，跳過 ① ② 只顯示時間/費用/統計，直接啟動。
+
+---
+
+**計算公式（數字填入前先算）：**
+
+時間：
+- 每批次耗時 = 該批最慢 goal 的基準時間（haiku=1分、sonnet=3分、opus=7分）
+- wall-clock = Σ(各批最慢 goal 時間) × 1.2
+- 顯示範圍：wall-clock ~ wall-clock×1.5（如「約 9–14 分鐘」）
+
+費用（全依 Sonnet 計，最壞情況；haiku/opus 自動調整說明）：
+- 輸入：每 goal 讀 goal 檔約 4,000 tokens + 系統提示 2,000 = 6,000 tokens/goal
+- 輸出：每 goal 約 1,500 tokens
+- 單 goal 費用：(6000×$0.000003) + (1500×$0.000015) = $0.018 + $0.023 = ~$0.04
+- N goals：~$0.04×N（下限）~ $0.04×N×1.8（上限）
+- 顯示：「約 $X–$Y USD（Sonnet $3/$15 per MTok）」
+- 有 opus goal 提示：「含 opus tier，實際費用會更高」
+- 有 haiku goal 提示：「haiku tier 約便宜 6–10×」
+
 ## Step 2 — 啟動 runner
 
 ```
