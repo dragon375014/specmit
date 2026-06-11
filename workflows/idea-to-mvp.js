@@ -36,7 +36,7 @@ const graph = A.graph
 if (!graph || !Array.isArray(graph.goals) || graph.goals.length === 0) {
   throw new Error('args.graph missing or empty — the pipeline-runner skill must pass parsed goal-graph.json')
 }
-if (graph.schema_version !== '1.0') {
+if (String(graph.schema_version) !== '1.0') {
   throw new Error(`unsupported goal-graph schema_version "${graph.schema_version}" — this runner pins 1.0 (PIPELINE-CONTRACT.md §2)`)
 }
 const specDir = A.specDir || 'spec'
