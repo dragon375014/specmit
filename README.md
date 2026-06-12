@@ -1,7 +1,9 @@
-# skill-pipeline
+# specmit
 
-> **Pipeline runner for the dragon375014 AI toolchain: idea → spec → goals → parallel execution, in one command.**
+> **Auto spec → MVP, Made in Taiwan, MIT licensed.**
 > 把「人工搬運」的管線升級成一個指令跑完——工具之間仍然鬆耦合，只靠檔案格式溝通。
+>
+> *specmit = spec + submit + MIT（Made in Taiwan）*
 
 🔒 **Private while spec-sonar is private** — this repo consumes spec-sonar's goal-graph format; it goes public together with (or after) spec-sonar, never before. See "Publication gate" below.
 

@@ -12,8 +12,8 @@ This contract **does not define a new format** for upstream artifacts — that w
 | `spec/goal-graph.json` | **spec-sonar** `schemas/goal-graph.schema.json` (v1.0) | consumer — reads the §3 subset, tolerant to everything else |
 | `spec/goals/G*.md` | **spec-sonar** `docs/output-directory-spec.md` + `examples/mathdefense/goals/G4a.md` | consumer — passed verbatim to executor agents, never parsed structurally |
 | `spec/contracts/C*.md` | **spec-sonar** (frozen interface contracts) | context only — already embedded verbatim in goal files; never scheduled |
-| `runs/<run-id>/run-report.json` | **skill-pipeline (this repo)** — §5 | producer |
-| executor agent I/O | **skill-pipeline (this repo)** — §6 | producer |
+| `runs/<run-id>/run-report.json` | **specmit (this repo)** — §5 | producer |
+| executor agent I/O | **specmit (this repo)** — §6 | producer |
 
 Upstream schema bump (e.g. 1.0 → 1.1) ⇒ revise this contract in the same change; the runner fail-fasts on any `schema_version` it does not pin.
 
@@ -90,6 +90,6 @@ After a run, the bridge skill writes back into `goal-graph.json`:
 
 ## 7. Compatibility matrix
 
-| skill-pipeline | goal-graph schema | spec-sonar |
+| specmit | goal-graph schema | spec-sonar |
 |---|---|---|
 | contract 1.0 | 1.0 | v1（goal-decomposer v1 輸出） |
