@@ -17,7 +17,7 @@
   spec/goal-graph.json + spec/goals/G*.md + spec/contracts/C*.md
       │
       │  ╔══════════════ THIS REPO ══════════════╗
-      │  ║ pipeline-runner (L3b bridge skill)    ║  reads graph, launches runner,
+      │  ║ specmit (L3b bridge skill)    ║  reads graph, launches runner,
       │  ║   └─▶ workflows/idea-to-mvp.js (L3)   ║  batch-parallel executor agents
       │  ║         governed by                   ║  (model_tier-mapped), BLOCKED
       │  ║   PIPELINE-CONTRACT.md (L2)           ║  protocol + governance hook
@@ -40,7 +40,7 @@
    ```
    Or copy manually:
    ```
-   skills/pipeline-runner/  →  .claude/skills/pipeline-runner/
+   skills/specmit/  →  .claude/skills/specmit/
    workflows/idea-to-mvp.js →  .claude/workflows/idea-to-mvp.js
    ```
 2. In a Claude Code session: say **「跑完整管線」 / "run the pipeline"**. The skill routes by what exists:
@@ -55,7 +55,7 @@
 ECOSYSTEM.md                  the canonical map of the whole toolchain (all repos link here)
 PIPELINE-CONTRACT.md          L2 — file-format protocol (consumer contract)
 workflows/idea-to-mvp.js      L3 — Dynamic Workflow runner (validate → execute → report)
-skills/pipeline-runner/       L3b — bridge skill (trigger + pre-flight + writeback)
+skills/specmit/       L3b — bridge skill (trigger + pre-flight + writeback)
 bin/pipeline.js               the `specmit` npm CLI (init / sync / contrib)
 ```
 

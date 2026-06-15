@@ -30,7 +30,7 @@ const GLOBAL = [
   ['dragon375014/spec-sonar', 'skills/goal-decomposer/references/goal-graph.schema.json',   'goal-decomposer/references/goal-graph.schema.json'],
   ['dragon375014/spec-sonar', 'skills/goal-decomposer/references/output-directory-spec.md', 'goal-decomposer/references/output-directory-spec.md'],
   // specmit: bridge skill global so Claude finds it in every project
-  ['dragon375014/specmit', 'skills/pipeline-runner/SKILL.md',                        'pipeline-runner/SKILL.md'],
+  ['dragon375014/specmit', 'skills/specmit/SKILL.md',                        'specmit/SKILL.md'],
 ]
 const PROJECT = [
   // workflow stays project-local: scriptPath '.claude/workflows/idea-to-mvp.js' is relative to project cwd
@@ -94,7 +94,7 @@ async function cmdInit(argv) {
   console.log('  1. Open Claude Code in this folder')
   console.log('  2. Say  「我想做一個...」          → idea-to-spec  (5–7 輪收斂)')
   console.log('  3. Say  「幫我分解這份規格」        → goal-decomposer')
-  console.log('  4. Say  「跑完整管線」              → pipeline-runner → parallel execution\n')
+  console.log('  4. Say  「跑完整管線」              → specmit → parallel execution\n')
 }
 
 async function cmdContrib() {

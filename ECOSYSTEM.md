@@ -27,7 +27,7 @@
       ▼
 ┌────────────────────────────────────────────────────────────────┐
 │  specmit (this repo)            RUN THE PIPELINE      執行管線  │
-│  pipeline-runner skill → idea-to-mvp.js workflow runner        │
+│  specmit skill → idea-to-mvp.js workflow runner        │
 │  batch-parallel executors, frozen contracts, BLOCKED protocol  │
 │  (domain skills in your project's .claude/skills/ do the work) │
 └────────────────────────────────────────────────────────────────┘
@@ -52,7 +52,7 @@ npx specmit init
 
 | 指令 | 說明 |
 |---|---|
-| `specmit init` | 安裝核心 skill（spec-sonar 兩套 + pipeline-runner + idea-to-mvp workflow）+ 建立 spec/ 與 runs/ 資料夾 |
+| `specmit init` | 安裝核心 skill（spec-sonar 兩套 + specmit + idea-to-mvp workflow）+ 建立 spec/ 與 runs/ 資料夾 |
 | `specmit sync` | 更新已安裝 skill 到最新 canonical 版本 |
 | `specmit contrib` | 顯示本地修改與 canonical 的差異，印出 PR 步驟 |
 
@@ -66,7 +66,7 @@ npx specmit init
 | [goal-workflow-designer](https://github.com/dragon375014/goal-workflow-designer) | shape | `goal` (depth), `workflow-shaper` (breadth) | "one task done right" / "same check over many units" |
 | [claude-skills-governance-meta](https://github.com/dragon375014/claude-skills-governance-meta) | govern | `governance-guard` + `step-back-sentinel` templates, `architecture-completeness-guardian` + `trace-lock-modify` + `step-back-review` scaffold skills, adoption fitness check | "stop shipping the same class of bug" / "gate architecture changes" |
 | [agent-work-board](https://github.com/dragon375014/agent-work-board) | coordinate | WORK-BOARD template, claim ritual, footprint methodology | "I run 2+ AI sessions in parallel on one repo" |
-| [specmit](https://github.com/dragon375014/specmit) | run + front door | this map, `PIPELINE-CONTRACT.md` (consumer contract pinning goal-graph 1.0), `idea-to-mvp` workflow runner, `pipeline-runner` bridge skill, the `specmit` npm CLI (`bin/`) | "run the whole spec→goals→execution pipeline in one command" / "where do I start?" |
+| [specmit](https://github.com/dragon375014/specmit) | run + front door | this map, `PIPELINE-CONTRACT.md` (consumer contract pinning goal-graph 1.0), `idea-to-mvp` workflow runner, `specmit` bridge skill, the `specmit` npm CLI (`bin/`) | "run the whole spec→goals→execution pipeline in one command" / "where do I start?" |
 
 The author also keeps a **private cross-project knowledge vault** (`ai-dev-toolkit`) — it is not required for any workflow above; everything public lives in the five repos in this table.
 
@@ -81,7 +81,7 @@ The author also keeps a **private cross-project knowledge vault** (`ai-dev-toolk
 | stop a recurring bug class | claude-skills-governance-meta | run the adoption fitness check, then copy a template |
 | gate "I want to add X" declarations | governance-meta scaffold `architecture-completeness-guardian` | install into `.claude/skills/`, fill the dispatch table |
 | coordinate parallel sessions | agent-work-board | board file on main + claim ritual |
-| run a decomposed spec all the way to working code | specmit `pipeline-runner` | pre-flight → batch-parallel executors → run-report + BLOCKED questions back to you |
+| run a decomposed spec all the way to working code | specmit `specmit` | pre-flight → batch-parallel executors → run-report + BLOCKED questions back to you |
 
 **One-second disambiguation** (from goal-workflow-designer): count how many units. One thing to perfect → `goal`. The same check across many things → `workflow-shaper`. A whole multi-module spec → `goal-decomposer`.
 
@@ -100,7 +100,7 @@ Several skills exist in more than one place. **The repo copy is canonical; insta
 | `idea-to-spec`, `goal-decomposer` | spec-sonar `skills/` | `~/.claude/skills/` |
 | `goal`, `workflow-shaper` | goal-workflow-designer `skills/` | `~/.claude/skills/`, project `.claude/skills/` |
 | `architecture-completeness-guardian`, `trace-lock-modify`, `step-back-review` | claude-skills-governance-meta `scaffold/skills/` | project `.claude/skills/` (customized) |
-| `pipeline-runner`, `idea-to-mvp.js` | specmit `skills/` + `workflows/` | project `.claude/skills/`, `.claude/workflows/` (frontmatter `canonical: false`) |
+| `specmit`, `idea-to-mvp.js` | specmit `skills/` + `workflows/` | project `.claude/skills/`, `.claude/workflows/` (frontmatter `canonical: false`) |
 
 Three rules:
 

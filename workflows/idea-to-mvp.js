@@ -1,7 +1,7 @@
 export const meta = {
   name: 'idea-to-mvp',
   description: 'Execute a spec-sonar goal graph end-to-end: validate deps, batch-parallel agents (tier-mapped models), aggregate report',
-  whenToUse: 'After goal-decomposer produced spec/goal-graph.json + spec/goals/G*.md. The pipeline-runner bridge skill reads the graph and passes it via args — this script never touches the filesystem itself.',
+  whenToUse: 'After goal-decomposer produced spec/goal-graph.json + spec/goals/G*.md. The specmit bridge skill reads the graph and passes it via args — this script never touches the filesystem itself.',
   phases: [
     { title: 'Validate', detail: 'schema gate + Kahn cycle check + batch cross-check (pure JS, zero agents)' },
     { title: 'Execute', detail: 'one executor agent per goal, parallel within a batch, model_tier-mapped' },
@@ -34,7 +34,7 @@ export const meta = {
 const A = args || {}
 const graph = A.graph
 if (!graph || !Array.isArray(graph.goals) || graph.goals.length === 0) {
-  throw new Error('args.graph missing or empty — the pipeline-runner skill must pass parsed goal-graph.json')
+  throw new Error('args.graph missing or empty — the specmit skill must pass parsed goal-graph.json')
 }
 if (String(graph.schema_version) !== '1.0') {
   throw new Error(`unsupported goal-graph schema_version "${graph.schema_version}" — this runner pins 1.0 (PIPELINE-CONTRACT.md §2)`)

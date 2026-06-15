@@ -1,5 +1,5 @@
 ---
-name: pipeline-runner
+name: specmit
 description: |
   使用者要「一個指令跑完 idea→spec→goals→平行執行」整條管線、或手上已有 spec-sonar 產出的
   goal graph 想直接平行執行時 trigger。本 skill 是 L3b bridge：把檔案世界（goal-graph.json /
@@ -16,7 +16,7 @@ description: |
   - 同質批次掃描（讓位 workflow-shaper——那是「同一檢查 × N 單位」，這裡是「異質 goal 依賴圖」）
 ---
 
-# Pipeline Runner — L3b bridge skill
+# specmit — L3b bridge skill
 
 > 角色：**接線生，不是工人**。檢查管線該從哪一段進、把 goal-graph.json 餵給 runner workflow、
 > 落地 run-report 與 status writeback。所有格式規則見 [PIPELINE-CONTRACT.md](../../PIPELINE-CONTRACT.md)。
