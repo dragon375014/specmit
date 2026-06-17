@@ -1,6 +1,6 @@
 export const meta = {
   name: 'idea-to-mvp',
-  description: 'Execute a spec-sonar goal graph end-to-end: validate deps, batch-parallel agents (tier-mapped models), independent scorecard audit, aggregate report',
+  description: 'Execute a spec-sonar goal graph end-to-end: validate deps, batch-parallel agents (tier-mapped models), independent scorecard audit, optional autofix repair loop, aggregate report',
   whenToUse: 'After goal-decomposer produced spec/goal-graph.json + spec/goals/G*.md. The specmit bridge skill reads the graph and passes it via args — this script never touches the filesystem itself.',
   phases: [
     { title: 'Validate', detail: 'schema gate + Kahn cycle check + batch cross-check (pure JS, zero agents)' },
@@ -44,6 +44,17 @@ export const meta = {
 //                pre-scorecard runner — regression escape hatch). Pure decision
 //                core SSOT: lib/scorecard-logic.mjs (inlined verbatim below —
 //                the sandbox forbids imports; drift-guarded by its test).
+//   autofix:    optional — the optimizer回邊 that turns this linear pipeline into
+//                a self-correcting loop. 'off' (default) = audit-only, downgrades
+//                surface to the human; 'normal' = 1 repair attempt; 'aggressive' =
+//                up to 3. When the scorecard REFUTES a positive claim, a re-spawned
+//                executor (the fixer) repairs the auditor's listed defects, then
+//                the SAME independent scorecard re-audits (the fixer never self-
+//                certifies — 球員兼裁判 protection holds). Bounded; on exhaustion
+//                it surfaces to the human. The dial only changes how hard the fixer
+//                tries — the evaluator is always on, so cranking it up costs
+//                tokens/time, never correctness. Auditor-outage downgrades are not
+//                autofixed (the fixer can't help a dead auditor).
 // }
 // ============================================================================
 
@@ -61,6 +72,16 @@ const serial = !!A.serial
 const only = Array.isArray(A.only) && A.only.length ? new Set(A.only) : null
 const SCORECARD_MODES = new Set(['full', 'cheap', 'off'])
 const scorecard = SCORECARD_MODES.has(A.scorecard) ? A.scorecard : 'full'
+// optimizer (opt-in): the回邊 that turns a linear pipeline into a self-correcting
+// loop. The scorecard (evaluator) is always-on; this dial only controls how hard
+// the FIXER tries. off = no repair (audit-only, current default); normal = 1 fix
+// attempt; aggressive = up to 3. Every fix is re-audited by the same ratchet, so
+// turning the dial up costs tokens/time, never correctness (a bad fix can only be
+// tightened, never let through). Auditor-OUTAGE downgrades are never autofixed
+// (the fixer can't help if the auditor itself can't run).
+const AUTOFIX_LEVELS = new Set(['off', 'normal', 'aggressive'])
+const autofix = AUTOFIX_LEVELS.has(A.autofix) ? A.autofix : 'off'
+const autofixCycles = { off: 0, normal: 1, aggressive: 3 }[autofix]
 
 // ---------------------------------------------------------------------------
 phase('Validate')
@@ -125,7 +146,8 @@ if (declared && batchesConsistent(declared)) {
 } else {
   batches = kahn; planSource = declared ? 'Kahn fallback (declared batches inconsistent with depends_on)' : 'Kahn fallback (no batches declared)'
 }
-log(`plan: ${graph.goals.length} goals in ${batches.length} batches — ${planSource}${serial ? ' [serial mode]' : ''} [scorecard:${scorecard}]`)
+log(`plan: ${graph.goals.length} goals in ${batches.length} batches — ${planSource}${serial ? ' [serial mode]' : ''} [scorecard:${scorecard}]${autofix !== 'off' ? ` [autofix:${autofix}]` : ''}`)
+if (autofix !== 'off' && scorecard === 'off') log(`⚠ autofix:${autofix} 但 scorecard:off — autofix 靠 scorecard 的反駁信號驅動，稽核關掉＝沒有修補目標，autofix 不會觸發。要 autofix 請開 scorecard。`)
 
 // contract consumer reconciliation — a minimal "reconciler": every frozen
 // interface must balance, declared consumers vs goals that actually depend on
@@ -324,8 +346,62 @@ async function runScorecard(id, claim, mode) {
   return merged
 }
 
-const results = new Map()   // id → structured result (post-scorecard)
+const results = new Map()   // id → structured result (post-scorecard, post-autofix)
 const blockedBy = new Map() // id → upstream id that blocked it
+
+// ---- optimizer: autofix回邊 (opt-in via args.autofix) ----------------------
+// SEPARATION OF POWERS: the fixer is a re-spawned, write-capable executor; the
+// auditor (scorecard) stays read-only; the fixer NEVER certifies its own repair —
+// every fix goes back through the independent scorecard. This is 球員兼裁判
+// protection one level up: the thing that repairs is not the thing that judges.
+const isAuditorDown = r => ((r.scorecard && r.scorecard.discrepancies) || []).some(d => /auditor unavailable/.test(d))
+function fixerPrompt(g, discrepancies) {
+  return [
+    executorPrompt(g),
+    ``,
+    `── REVISION REQUIRED — an independent auditor rejected your last attempt ──`,
+    `A read-only scorecard auditor RE-RAN this goal's verification against ground truth and REFUTED your claim. Your code is already in ${projectDir}. Read its current state, repair EXACTLY what the auditor observed, then re-run every mechanical verification command yourself:`,
+    ...(discrepancies && discrepancies.length
+      ? discrepancies.map((d, i) => `   ${i + 1}. ${d}`)
+      : ['   (no specific discrepancies recorded — re-run the goal file\'s verification and make it genuinely pass)']),
+    `Do not start over and do not add scope — fix the specific defects, keep frozen interfaces and non-goals intact. The same auditor will independently re-check your fix.`,
+  ].filter(Boolean).join('\n')
+}
+
+let autofixAttempts = 0, autofixRepaired = 0, autofixExhausted = 0
+async function executeGoal(id) {
+  const g = goals.get(id)
+  let claim = await agent(executorPrompt(g), { label: id, phase: 'Execute', model: TIER[g.model_tier], schema: RESULT })
+  claim = claim || { goal_id: id, status: 'failed', verify: { passed: false, evidence: 'executor agent returned null (skipped or terminal error)' } }
+  let result = await runScorecard(id, claim, scorecard)
+  // the回邊: while the auditor refuted a positive claim (and it was a real
+  // ground-truth refutation, not an auditor outage), let the fixer repair and
+  // re-audit, bounded by the dial. Hard-stop on exhaustion → surface to human.
+  let cycle = 0
+  while (
+    autofixCycles > 0 && cycle < autofixCycles &&
+    result.scorecard && result.scorecard.upheld === false && !isAuditorDown(result) &&
+    (result.status === 'done' || result.status === 'failed')
+  ) {
+    cycle++; autofixAttempts++
+    const discrepancies = (result.scorecard && result.scorecard.discrepancies) || []
+    log(`🔧 autofix[${autofix}] ${id}: cycle ${cycle}/${autofixCycles} — re-running executor against the auditor's findings`)
+    const fixed = await agent(fixerPrompt(g, discrepancies), { label: `${id}~fix${cycle}`, phase: 'Execute', model: TIER[g.model_tier], schema: RESULT })
+    if (!fixed) break
+    result = await runScorecard(id, fixed, scorecard) // independent re-audit — the fixer never self-certifies
+    if (result.scorecard && result.scorecard.upheld === true) {
+      autofixRepaired++
+      log(`✅ autofix ${id}: repaired after ${cycle} cycle(s) — auditor now upholds "${result.status}"`)
+      break
+    }
+  }
+  if (cycle > 0 && !(result.scorecard && result.scorecard.upheld === true)) {
+    autofixExhausted++
+    result = { ...result, notes: [result.notes, `UNVERIFIED: autofix exhausted after ${cycle} cycle(s); independent auditor still refutes — needs human`].filter(Boolean).join('\n') }
+    log(`⚠ autofix ${id}: exhausted after ${cycle} cycle(s) — still refuted, surfacing to human`)
+  }
+  results.set(id, result)
+}
 
 function upstreamOk(id) {
   for (const d of gdeps(id)) {
@@ -354,16 +430,10 @@ for (let i = 0; i < batches.length; i++) {
     } else runnable.push(id)
   }
   if (!runnable.length) continue
-  const run = id => () =>
-    agent(executorPrompt(goals.get(id)), {
-      label: id,
-      phase: 'Execute',
-      model: TIER[goals.get(id).model_tier],
-      schema: RESULT,
-    })
-      .then(r => r || { goal_id: id, status: 'failed', verify: { passed: false, evidence: 'executor agent returned null (skipped or terminal error)' } })
-      .then(claim => runScorecard(id, claim, scorecard))   // independent audit before it counts
-      .then(final => results.set(id, final))
+  // each goal: executor → scorecard audit → (opt-in) autofix回邊 → final result.
+  // the autofix loop is sequential WITHIN a goal (a fix depends on the audit);
+  // goals across a batch still run in parallel via the scheduler below.
+  const run = id => () => executeGoal(id)
   if (serial) { for (const id of runnable) await run(id)() }
   else await parallel(runnable.map(run))
   // intra-batch file-collision tripwire: parallel goals that touched the same
@@ -409,6 +479,10 @@ const summary = {
   // goals whose acceptance criteria were NOT fully executed — the bridge skill
   // must surface these as a manual-verification checklist; done ≠ accepted.
   needs_manual_verification: perGoal.filter(p => p.status === 'done').map(p => p.id),
+  // optimizer telemetry — only present when autofix ran. Lets the user TUNE the
+  // dial from data, not vibes: how many fix attempts, how many stuck, how many
+  // the auditor still refutes after fixing.
+  ...(autofix !== 'off' ? { autofix, autofix_attempts: autofixAttempts, autofix_repaired: autofixRepaired, autofix_exhausted: autofixExhausted } : {}),
   // full handoff ledger (runtime decisions + expectations) — G-FINAL and the
   // bridge skill must audit every expectation: was it picked up by its target?
   handoffs: perGoal.flatMap(p => (p.handoffs || []).map(h => ({ from: p.id, ...h }))),
@@ -416,6 +490,9 @@ const summary = {
 log(`done: ${summary.verified} verified / ${summary.done} done-未驗 / ${summary.blocked} blocked / ${summary.failed} failed${summary.scorecard_downgrades ? ` — ⚠️ ${summary.scorecard_downgrades} scorecard downgrade${summary.scorecard_downgrades > 1 ? 's' : ''} (self-report ≠ ground truth)` : ''}`)
 if (summary.needs_manual_verification.length) {
   log(`⚠ 未驗收（status=done）：${summary.needs_manual_verification.join(', ')} — 這些 goal 的驗收條件尚未被任何人執行，詳見各 goal notes 的 UNVERIFIED: 行`)
+}
+if (autofix !== 'off') {
+  log(`🔧 autofix[${autofix}]：${autofixAttempts} 次修補 → ${autofixRepaired} 個被獨立稽核確認修好、${autofixExhausted} 個修不過仍待人工（調這個旋鈕看這三個數）`)
 }
 const openExpectations = summary.handoffs.filter(h => h.kind === 'expectation')
 if (openExpectations.length) {

@@ -57,11 +57,14 @@ description: |
 ⏱ 預估執行時間：約 X–Y 分鐘
 💰 預估費用：約 $A–$B USD（Sonnet 基準 ±50%）
 📊 [N] goals / [B] 批次 / haiku×[h] sonnet×[s] opus×[o]
+🔧 旋鈕：scorecard:[mode]（獨立驗證）· autofix:[level]（off=只查不修 / normal=修1次 / aggressive=最多3次）
+   ↳ 預設 autofix:off。要管線自己修被稽核打回的 goal → 設 autofix:'normal'，跑完看 summary 的
+     autofix_attempts/repaired/exhausted 這三個數來調。
 
 ▶ 管線啟動中，以上事項請並行處理...
 ```
 
-**若 `project_setup` 不存在**，跳過 ① ② 只顯示時間/費用/統計，直接啟動。
+**這個 🔧 旋鈕行務必每次都印**——讓使用者每次啟動都看得到 autofix 這個能力與當前段位，不會忘記它存在（opt-in 功能最大的風險就是隱形）。**若 `project_setup` 不存在**，跳過 ① ② 只顯示時間/費用/統計 + 🔧 旋鈕行，直接啟動。
 
 ---
 
@@ -92,7 +95,8 @@ Workflow({
     projectDir: '.',
     serial: false,        // 平行 agent 撞共享檔時的逃生口 → true
     only: null,           // resume：只重跑指定 goal ids，上游信任 graph 內 prior status
-    scorecard: 'full'     // 獨立驗證棘輪：'full'(預設) / 'cheap'(只 Tier-1) / 'off'(退回無稽核)
+    scorecard: 'full',    // 獨立驗證棘輪：'full'(預設) / 'cheap'(只 Tier-1) / 'off'(退回無稽核)
+    autofix: 'off'        // 自動修回邊：'off'(預設,只查不修) / 'normal'(修1次) / 'aggressive'(最多3次)
   }
 })
 ```
@@ -106,6 +110,11 @@ Tier-2 fresh agent 重跑冪等驗證指令 + git diff 反查 ground truth。`pi
 不能升**；稽核員 tier 不低於 executor；稽核員死掉 fail-closed（verified→done + 標記，不打 failed）。
 - `cheap`：只跑免費的 Tier-1（快、零 token，仍抓「說 verified 卻無證據」）。
 - `off`：完全退回無稽核（回歸測試逃生口）。
+
+**autofix（自動修回邊）— 預設 off，這是把線變成 loop 的旋鈕**：scorecard 只查不修＝線性管線 +
+驗證閘；`autofix` 加上「失敗→修→再審」那條回邊。`normal` 修 1 次、`aggressive` 最多 3 次。
+**安全來自旋鈕只轉 optimizer**：修補者是重 spawn 的 executor（會寫），稽核員永遠唯讀，**每次修完都被同一個獨立稽核重審**（修補者不准自我認證＝球員兼裁判防線升一層）；棘輪保證壞修只會被收緊不會放行，所以轉到底**只花 token、不傷正確性**；修不過就硬停、丟回給人。`autofix` 需要 `scorecard` 開著（它靠稽核的反駁信號驅動）。
+回報帶 `autofix_attempts/repaired/exhausted` 三個數——**靠數據調旋鈕，不靠感覺**。建議從 `normal` 起步。
 
 **內圈 vs 外圈邊界**（這支 skill 守的線）：scorecard 屬**內圈**（機器自動做、每個 goal 內、只收緊）。
 它**永遠不碰 spec、不改 scope、不替使用者接受未驗的工作**——那些是**外圈**（人）：blocked 問題、
@@ -126,6 +135,39 @@ failed/降級 goal 的處置、改 goal 還是改 spec、接受 done。一句話
 6. `summary.scorecard_downgrades > 0` → 獨立稽核員把某些 goal 收緊了（自報 ≠ ground truth）。
    逐條把被降級的 goal（`p.scorecard.upheld === false`）連同 `p.scorecard.discrepancies`（稽核員
    實際觀察到的落差）呈給使用者——**這是「球員兼裁判被抓到」的出口，務必明顯標出，不可淹沒在綠燈裡。**
+   - **若這次 `autofix` 是 off**，額外加一句提醒：「這 N 個 goal 是被稽核打回後丟給你的；下次把
+     `autofix:'normal'` 打開，管線會自己先試修一輪再丟給你。」（讓使用者在**最有感的時機**——剛被降級時
+     ——發現 autofix 這個能力，比放在文件裡更不會忘。）
+   - **若 `autofix` 有開**，把 `autofix_repaired / autofix_exhausted` 明顯回報：修好幾個、還有幾個修不過要人工。
+
+## Step 4 — skill-signal reflection（跑完那一刻的反向器官 · evidence-gated）
+
+> 體系的觸發器幾乎全是「往前蓋」；這一步是 skill 系統的「往後查」器官——問一次「這趟有沒有暴露出 skill 缺口，
+> 該被捕捉成可複用的東西」。**輕量版：偵測 + 提議，人來拍板。** 跑完 Step 1–3 後**做一次**。
+
+**只看證據,不憑感覺。** 反思的素材是這趟**真的撞到的牆**——不是腦補。來源限定在：
+`summary.questions`（blocked 問題）、`failed` goal 的 `verify.evidence`、`scorecard.discrepancies`、
+`autofix_exhausted` 的 notes、各 goal notes 的 `UNVERIFIED:` 行。對著這些問五種信號：
+
+| 信號 | 意思 |
+|---|---|
+| `skill_gap` | 任務要的知識,現有 skill/memory 都沒覆蓋,靠猜完成 |
+| `conflict` | 兩份 skill 指引互相矛盾,模型自己選了一個 |
+| `imprecision` | skill 存在但太籠統,必須自行詮釋 |
+| `edge_case` | skill 覆蓋 90%,這次是那 10% |
+| `new_pattern` | 做了某動作沒對應 skill,且未來很可能再撞 |
+
+**鐵律（防幻覺式過度輸出,比 confidence 門檻更硬）**：
+- **每條信號必須引用具體證據**——實際 error 訊息 / 找到的 workaround / 哪個既有 skill 在哪裡不夠。**拿不出證據 → 不准提。**
+- **預設輸出是「無」。** 大多數 run 不會留下可複用教訓（撞牆是稀有事件）。寧可漏報,不要誤報。
+- 有信號 → 寫 `runs/<run-id>/skill-signals.json`（`{signal_type, target_skill, gap_description, evidence, suggested_addition, triggered_by}`）+ 簡短呈給使用者。
+
+**動作邊界（球員兼裁判升一層）**：信號只能**提議**——「建議補一條 memory/check/skill：X,因為實際撞到 Y。要我草擬成 PR 嗎?」
+**人點頭才草擬 → PR → 人 merge。絕不自動套用、絕不自動 merge**（迴圈不准在沒人看的情況下改寫自己的規則；這是內/外圈邊界：改規則 = 外圈 = 人）。
+
+> 真實案例:`node --check` 對 Workflow runner 假陽性那次,就是一個 `new_pattern` 信號——撞到牆、找到解法（AsyncFunction wrap）、未來會再撞。當時是**手動**捕捉的（寫了 memory + `scripts/check-syntax.mjs`）。這一步就是讓「手動捕捉」不再靠「剛好想到」。
+>
+> **刻意不做的重版（N≥2 才升級）**：自動撈 queue、高信心自動發 PR、skill 自我進化（Hermes 式）。那是 optimizer 那半、自動改規則風險最高,等這個 pattern 真的再發一次再蓋。
 
 ## 失敗模式速查
 
