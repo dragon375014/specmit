@@ -133,6 +133,35 @@ failed/降級 goal 的處置、改 goal 還是改 spec、接受 done。一句話
    逐條把被降級的 goal（`p.scorecard.upheld === false`）連同 `p.scorecard.discrepancies`（稽核員
    實際觀察到的落差）呈給使用者——**這是「球員兼裁判被抓到」的出口，務必明顯標出，不可淹沒在綠燈裡。**
 
+## Step 4 — skill-signal reflection（跑完那一刻的反向器官 · evidence-gated）
+
+> 體系的觸發器幾乎全是「往前蓋」；這一步是 skill 系統的「往後查」器官——問一次「這趟有沒有暴露出 skill 缺口，
+> 該被捕捉成可複用的東西」。**輕量版：偵測 + 提議，人來拍板。** 跑完 Step 1–3 後**做一次**。
+
+**只看證據,不憑感覺。** 反思的素材是這趟**真的撞到的牆**——不是腦補。來源限定在：
+`summary.questions`（blocked 問題）、`failed` goal 的 `verify.evidence`、`scorecard.discrepancies`、
+`autofix_exhausted` 的 notes、各 goal notes 的 `UNVERIFIED:` 行。對著這些問五種信號：
+
+| 信號 | 意思 |
+|---|---|
+| `skill_gap` | 任務要的知識,現有 skill/memory 都沒覆蓋,靠猜完成 |
+| `conflict` | 兩份 skill 指引互相矛盾,模型自己選了一個 |
+| `imprecision` | skill 存在但太籠統,必須自行詮釋 |
+| `edge_case` | skill 覆蓋 90%,這次是那 10% |
+| `new_pattern` | 做了某動作沒對應 skill,且未來很可能再撞 |
+
+**鐵律（防幻覺式過度輸出,比 confidence 門檻更硬）**：
+- **每條信號必須引用具體證據**——實際 error 訊息 / 找到的 workaround / 哪個既有 skill 在哪裡不夠。**拿不出證據 → 不准提。**
+- **預設輸出是「無」。** 大多數 run 不會留下可複用教訓（撞牆是稀有事件）。寧可漏報,不要誤報。
+- 有信號 → 寫 `runs/<run-id>/skill-signals.json`（`{signal_type, target_skill, gap_description, evidence, suggested_addition, triggered_by}`）+ 簡短呈給使用者。
+
+**動作邊界（球員兼裁判升一層）**：信號只能**提議**——「建議補一條 memory/check/skill：X,因為實際撞到 Y。要我草擬成 PR 嗎?」
+**人點頭才草擬 → PR → 人 merge。絕不自動套用、絕不自動 merge**（迴圈不准在沒人看的情況下改寫自己的規則；這是內/外圈邊界：改規則 = 外圈 = 人）。
+
+> 真實案例:`node --check` 對 Workflow runner 假陽性那次,就是一個 `new_pattern` 信號——撞到牆、找到解法（AsyncFunction wrap）、未來會再撞。當時是**手動**捕捉的（寫了 memory + `scripts/check-syntax.mjs`）。這一步就是讓「手動捕捉」不再靠「剛好想到」。
+>
+> **刻意不做的重版（N≥2 才升級）**：自動撈 queue、高信心自動發 PR、skill 自我進化（Hermes 式）。那是 optimizer 那半、自動改規則風險最高,等這個 pattern 真的再發一次再蓋。
+
 ## 失敗模式速查
 
 | 症狀 | 含義 | 出口 |
