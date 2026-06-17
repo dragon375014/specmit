@@ -57,11 +57,14 @@ description: |
 ⏱ 預估執行時間：約 X–Y 分鐘
 💰 預估費用：約 $A–$B USD（Sonnet 基準 ±50%）
 📊 [N] goals / [B] 批次 / haiku×[h] sonnet×[s] opus×[o]
+🔧 旋鈕：scorecard:[mode]（獨立驗證）· autofix:[level]（off=只查不修 / normal=修1次 / aggressive=最多3次）
+   ↳ 預設 autofix:off。要管線自己修被稽核打回的 goal → 設 autofix:'normal'，跑完看 summary 的
+     autofix_attempts/repaired/exhausted 這三個數來調。
 
 ▶ 管線啟動中，以上事項請並行處理...
 ```
 
-**若 `project_setup` 不存在**，跳過 ① ② 只顯示時間/費用/統計，直接啟動。
+**這個 🔧 旋鈕行務必每次都印**——讓使用者每次啟動都看得到 autofix 這個能力與當前段位，不會忘記它存在（opt-in 功能最大的風險就是隱形）。**若 `project_setup` 不存在**，跳過 ① ② 只顯示時間/費用/統計 + 🔧 旋鈕行，直接啟動。
 
 ---
 
@@ -132,6 +135,10 @@ failed/降級 goal 的處置、改 goal 還是改 spec、接受 done。一句話
 6. `summary.scorecard_downgrades > 0` → 獨立稽核員把某些 goal 收緊了（自報 ≠ ground truth）。
    逐條把被降級的 goal（`p.scorecard.upheld === false`）連同 `p.scorecard.discrepancies`（稽核員
    實際觀察到的落差）呈給使用者——**這是「球員兼裁判被抓到」的出口，務必明顯標出，不可淹沒在綠燈裡。**
+   - **若這次 `autofix` 是 off**，額外加一句提醒：「這 N 個 goal 是被稽核打回後丟給你的；下次把
+     `autofix:'normal'` 打開，管線會自己先試修一輪再丟給你。」（讓使用者在**最有感的時機**——剛被降級時
+     ——發現 autofix 這個能力，比放在文件裡更不會忘。）
+   - **若 `autofix` 有開**，把 `autofix_repaired / autofix_exhausted` 明顯回報：修好幾個、還有幾個修不過要人工。
 
 ## Step 4 — skill-signal reflection（跑完那一刻的反向器官 · evidence-gated）
 
