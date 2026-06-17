@@ -44,9 +44,28 @@ An executor that self-reports `verified` is 球員兼裁判 (a player refereeing
 
 Modes via `args.scorecard`: `full` (default — Tier-1 + Tier-2), `cheap` (Tier-1 only, free), `off` (regression escape hatch). Pure core + truth-table tests: [lib/scorecard-logic.mjs](./lib/scorecard-logic.mjs).
 
+## The autofix dial — turning the line into a loop
+
+The scorecard alone is a **verification gate on a linear pipeline**: do once → audit → if it fails, surface to you. What makes something a *loop* (not a line) is the missing edge: *fail → fix → re-audit → repeat*. `args.autofix` adds exactly that edge — as a dial, off by default:
+
+| `autofix` | repair attempts | behaviour |
+|---|---|---|
+| `off` (default) | 0 | audit-only; a refuted goal is downgraded and surfaced to you |
+| `normal` | 1 | one fix attempt, then re-audit |
+| `aggressive` | up to 3 | fix → re-audit, up to 3 cycles |
+
+Why the dial is safe to crank up:
+
+- **Separation of powers**: the fixer is a *re-spawned executor* (write-capable); the auditor stays *read-only*; the fixer **never certifies its own repair** — every fix goes back through the same independent scorecard (球員兼裁判 protection, one level up).
+- **The ratchet still holds**: a bad fix can only be *tightened*, never let through. So turning the dial up costs tokens/time, **never correctness**.
+- **Bounded + hard-stop**: on exhaustion the goal is surfaced to you with the auditor's outstanding findings — the loop never spins or fakes success. Auditor *outages* are never autofixed (a dead auditor isn't a refutation).
+- **Tune from data**: the run report carries `autofix_attempts / autofix_repaired / autofix_exhausted` so you climb the dial empirically, not on vibes.
+
+`autofix` needs `scorecard` on (it's driven by the auditor's refutation signal). Evaluator always-on; optimizer opt-in.
+
 ## Inner loop vs outer loop — where the machine stops and you start
 
-- **Inner loop** (automated, per goal, in the runner): executor implements → Tier-1 → Tier-2 audit → ratchet. Bounded, ground-truth-checked, only-tightening. *(An opt-in auto-repair cycle on top of this is planned — off by default.)*
+- **Inner loop** (automated, per goal, in the runner): executor implements → Tier-1 → Tier-2 audit → ratchet → **(opt-in) autofix回邊**: if the auditor refutes, a re-spawned executor repairs the listed defects and the *same independent auditor* re-checks, bounded by the dial. Ground-truth-checked, only-tightening. This回邊 is what turns the line into a loop — see "The autofix dial" below.
 - **Outer loop** (human-gated, per run, surfaced by the bridge): BLOCKED questions, `failed`/downgraded goals, "is this a goal-file fix or a spec fix?", accepting `done` (not-fully-verified) work, the `only:` resume decision.
 - **The boundary rule**: anything that changes **scope / spec / accepts unverified work → you**. Making a defined goal pass its *own* defined verification → the machine. The scorecard never touches spec, never changes scope, never accepts unverified work on your behalf.
 
@@ -86,6 +105,7 @@ bin/pipeline.js               the `specmit` npm CLI (init / sync / contrib)
 - **`model_tier` mapping**: haiku/sonnet/opus per goal → same-tier executor agent. Pay for opus only where the decomposer said so.
 - **Governance hook**: every executor must run the host project's governance gates (guard scripts, audit:all, architecture-gate skills) before declaring done — composing with claude-skills-governance-meta instead of bypassing it.
 - **Scorecard ratchet** (`args.scorecard`, default `full`): an independent read-only auditor re-derives ground truth per positive result and can only **tighten** a status, never raise it (`pickTighter`). See "The verification ratchet" above. Pure core is a tested SSOT (`lib/scorecard-logic.mjs`) inlined verbatim into the sandboxed runner, with a behavioral drift guard so the copy can't rot.
+- **Autofix dial** (`args.autofix`, default `off`): the opt-in *fail → fix → re-audit* edge that turns the linear pipeline into a self-correcting loop. Fixer (re-spawned executor) ≠ auditor (read-only); every fix is independently re-audited; bounded with hard-stop; the ratchet means cranking the dial costs tokens, never correctness. Telemetry (`autofix_attempts/repaired/exhausted`) to tune from data. See "The autofix dial" above.
 - **No-fs sandbox split**: the workflow script never touches the filesystem (sandbox law); the bridge skill reads the graph in, executor agents read their own goal files, the bridge writes reports out.
 
 ## Ecosystem

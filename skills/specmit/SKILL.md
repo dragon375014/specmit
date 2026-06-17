@@ -92,7 +92,8 @@ Workflow({
     projectDir: '.',
     serial: false,        // 平行 agent 撞共享檔時的逃生口 → true
     only: null,           // resume：只重跑指定 goal ids，上游信任 graph 內 prior status
-    scorecard: 'full'     // 獨立驗證棘輪：'full'(預設) / 'cheap'(只 Tier-1) / 'off'(退回無稽核)
+    scorecard: 'full',    // 獨立驗證棘輪：'full'(預設) / 'cheap'(只 Tier-1) / 'off'(退回無稽核)
+    autofix: 'off'        // 自動修回邊：'off'(預設,只查不修) / 'normal'(修1次) / 'aggressive'(最多3次)
   }
 })
 ```
@@ -106,6 +107,11 @@ Tier-2 fresh agent 重跑冪等驗證指令 + git diff 反查 ground truth。`pi
 不能升**；稽核員 tier 不低於 executor；稽核員死掉 fail-closed（verified→done + 標記，不打 failed）。
 - `cheap`：只跑免費的 Tier-1（快、零 token，仍抓「說 verified 卻無證據」）。
 - `off`：完全退回無稽核（回歸測試逃生口）。
+
+**autofix（自動修回邊）— 預設 off，這是把線變成 loop 的旋鈕**：scorecard 只查不修＝線性管線 +
+驗證閘；`autofix` 加上「失敗→修→再審」那條回邊。`normal` 修 1 次、`aggressive` 最多 3 次。
+**安全來自旋鈕只轉 optimizer**：修補者是重 spawn 的 executor（會寫），稽核員永遠唯讀，**每次修完都被同一個獨立稽核重審**（修補者不准自我認證＝球員兼裁判防線升一層）；棘輪保證壞修只會被收緊不會放行，所以轉到底**只花 token、不傷正確性**；修不過就硬停、丟回給人。`autofix` 需要 `scorecard` 開著（它靠稽核的反駁信號驅動）。
+回報帶 `autofix_attempts/repaired/exhausted` 三個數——**靠數據調旋鈕，不靠感覺**。建議從 `normal` 起步。
 
 **內圈 vs 外圈邊界**（這支 skill 守的線）：scorecard 屬**內圈**（機器自動做、每個 goal 內、只收緊）。
 它**永遠不碰 spec、不改 scope、不替使用者接受未驗的工作**——那些是**外圈**（人）：blocked 問題、

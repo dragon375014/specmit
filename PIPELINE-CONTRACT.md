@@ -69,7 +69,7 @@ After a run, the bridge skill writes back into `goal-graph.json`:
 }
 ```
 
-> `scorecard` is a **runner-owned annotation** (this repo owns run-report) — `upheld:false` means the independent auditor tightened the executor's self-report. The runner only ever reads the §3 graph subset and only ever writes back `status` (§4), so adding this annotation needs **no `contract_version` bump**; it stays at 1.0.
+> `scorecard` is a **runner-owned annotation** (this repo owns run-report) — `upheld:false` means the independent auditor tightened the executor's self-report. When `args.autofix` ran, `summary` also carries `autofix_attempts / autofix_repaired / autofix_exhausted` (optimizer telemetry, also runner-owned). The runner only ever reads the §3 graph subset and only ever writes back `status` (§4), so these annotations need **no `contract_version` bump**; it stays at 1.0.
 
 ## 6. Executor agent I/O contract
 
