@@ -1,16 +1,23 @@
 export const meta = {
   name: 'idea-to-mvp',
-  description: 'Execute a spec-sonar goal graph end-to-end: validate deps, batch-parallel agents (tier-mapped models), aggregate report',
+  description: 'Execute a spec-sonar goal graph end-to-end: validate deps, batch-parallel agents (tier-mapped models), independent scorecard audit, aggregate report',
   whenToUse: 'After goal-decomposer produced spec/goal-graph.json + spec/goals/G*.md. The specmit bridge skill reads the graph and passes it via args — this script never touches the filesystem itself.',
   phases: [
     { title: 'Validate', detail: 'schema gate + Kahn cycle check + batch cross-check (pure JS, zero agents)' },
     { title: 'Execute', detail: 'one executor agent per goal, parallel within a batch, model_tier-mapped' },
-    { title: 'Report', detail: 'aggregate per-goal results + blocked chains' },
+    { title: 'Scorecard', detail: 'independent read-only auditor per positive result — git/exit-code ground truth, tighten-only ratchet' },
+    { title: 'Report', detail: 'aggregate per-goal results + blocked chains + scorecard downgrades' },
   ],
 }
 
 // ============================================================================
 // idea-to-mvp — pipeline runner (L3) for the dragon375014 toolchain
+//
+// ⛔ SYNTAX CHECK: run `npm run check`, NOT `node --check`. This file uses
+//    top-level await + return and is ESM-detected (type:module), so node --check
+//    falsely rejects it — but the Workflow engine wraps the body in an async
+//    function (injecting agent/log/phase/...), where both are legal. See
+//    scripts/check-syntax.mjs for the correct (engine-shaped) check.
 //
 // LOOSE COUPLING IS THE LAW HERE:
 //   - imports nothing, calls no repo code; the only interface is data:
@@ -28,6 +35,15 @@ export const meta = {
 //                (escape hatch if parallel agents collide on shared files)
 //   only:       optional — array of goal ids to (re)run; deps still checked
 //                against prior statuses in the graph (resume support)
+//   scorecard:  optional — independent verification ratchet. 'full' (default) =
+//                Tier-1 JS coherence + Tier-2 fresh read-only auditor agent that
+//                re-derives ground truth (git diff, re-run idempotent verify
+//                commands) and can only TIGHTEN a status, never raise it (球員兼
+//                裁判 → 唯讀稽核員); 'cheap' = Tier-1 only (free, catches self-
+//                contradictions); 'off' = no audit (behaviour identical to the
+//                pre-scorecard runner — regression escape hatch). Pure decision
+//                core SSOT: lib/scorecard-logic.mjs (inlined verbatim below —
+//                the sandbox forbids imports; drift-guarded by its test).
 // }
 // ============================================================================
 
@@ -43,6 +59,8 @@ const specDir = A.specDir || 'spec'
 const projectDir = A.projectDir || '.'
 const serial = !!A.serial
 const only = Array.isArray(A.only) && A.only.length ? new Set(A.only) : null
+const SCORECARD_MODES = new Set(['full', 'cheap', 'off'])
+const scorecard = SCORECARD_MODES.has(A.scorecard) ? A.scorecard : 'full'
 
 // ---------------------------------------------------------------------------
 phase('Validate')
@@ -107,7 +125,7 @@ if (declared && batchesConsistent(declared)) {
 } else {
   batches = kahn; planSource = declared ? 'Kahn fallback (declared batches inconsistent with depends_on)' : 'Kahn fallback (no batches declared)'
 }
-log(`plan: ${graph.goals.length} goals in ${batches.length} batches — ${planSource}${serial ? ' [serial mode]' : ''}`)
+log(`plan: ${graph.goals.length} goals in ${batches.length} batches — ${planSource}${serial ? ' [serial mode]' : ''} [scorecard:${scorecard}]`)
 
 // contract consumer reconciliation — a minimal "reconciler": every frozen
 // interface must balance, declared consumers vs goals that actually depend on
@@ -194,7 +212,119 @@ function executorPrompt(g) {
   ].filter(Boolean).join('\n')
 }
 
-const results = new Map()   // id → structured result
+// ---- scorecard (independent verifier) -------------------------------------
+// The executor's verify.evidence is SELF-REPORTED — 球員兼裁判. The scorecard is
+// a separate, READ-ONLY auditor that re-derives ground truth (git diff, re-run
+// idempotent verify commands) and can only TIGHTEN the status, never loosen it.
+// SSOT for the pure decision core: lib/scorecard-logic.mjs (the Workflow sandbox
+// forbids imports, so the pure fns below are a VERBATIM copy; the drift guard in
+// lib/scorecard-logic.test.mjs evals this region and proves it hasn't rotted).
+const RANK = { verified: 3, done: 2, blocked: 1, failed: 0 }
+function tier1Incoherence(claim) {
+  const reasons = []
+  if (claim.status === 'verified') {
+    const passed = claim.verify && claim.verify.passed === true
+    if (!passed) reasons.push('status=verified but verify.passed is not true')
+    const ev = ((claim.verify && claim.verify.evidence) || '').trim()
+    if (ev.length < 12) reasons.push(`status=verified but evidence is empty/trivial (${ev.length} chars)`)
+  }
+  return reasons
+}
+function pickTighter(claimStatus, verdictStatus) {
+  if (!(verdictStatus in RANK)) return claimStatus
+  return RANK[verdictStatus] < RANK[claimStatus] ? verdictStatus : claimStatus
+}
+function needsTier2(status) { return status === 'verified' || status === 'done' }
+function mergeTier1Downgrade(claim, reasons) {
+  return {
+    ...claim,
+    status: 'failed',
+    verify: { passed: false, evidence: `[scorecard T1] self-contradictory claim downgraded: ${reasons.join('; ')}. Original self-report: ${(claim.verify && claim.verify.evidence) || ''}` },
+    scorecard: { upheld: false, tier: 1, discrepancies: reasons },
+  }
+}
+function mergeTier2(claim, verdict) {
+  if (!verdict) return claim
+  const status = pickTighter(claim.status, verdict.adjusted_status)
+  return {
+    ...claim,
+    status,
+    verify: { passed: status === 'verified', evidence: `[scorecard T2] ${verdict.scorecard_evidence || ''}` },
+    scorecard: { upheld: !!verdict.upheld, tier: 2, discrepancies: verdict.discrepancies || [] },
+  }
+}
+function failClosedNoAudit(claim) {
+  if (claim.status !== 'verified') return claim
+  return {
+    ...claim,
+    status: 'done',
+    verify: { passed: false, evidence: `[scorecard T2] auditor unavailable — claim not independently verified, downgraded verified→done. Original self-report: ${(claim.verify && claim.verify.evidence) || ''}` },
+    scorecard: { upheld: false, tier: 2, discrepancies: ['auditor unavailable (fail-closed: unconfirmed ≠ verified)'] },
+  }
+}
+
+const VERDICT = {
+  type: 'object',
+  required: ['goal_id', 'upheld', 'adjusted_status', 'scorecard_evidence'],
+  properties: {
+    goal_id: { type: 'string' },
+    upheld: { type: 'boolean' },
+    adjusted_status: { enum: ['verified', 'done', 'failed'] },
+    scorecard_evidence: { type: 'string' },
+    discrepancies: { type: 'array', items: { type: 'string' } },
+  },
+}
+
+function scorecardPrompt(g, claim) {
+  const goalPath = `${specDir}/${g.file}`
+  return [
+    `You are an INDEPENDENT scorecard auditor for goal ${g.id} — "${g.title}". A separate executor agent did the work and CLAIMS the result below; your job is to confirm or REFUTE it against ground truth. You did not see its reasoning and must not trust its words.`,
+    ``,
+    `Executor's claim (self-reported — treat as unverified):`,
+    `  status: ${claim.status}`,
+    `  verify.passed: ${claim.verify && claim.verify.passed}`,
+    `  verify.evidence: ${JSON.stringify((claim.verify && claim.verify.evidence) || '')}`,
+    `  files_touched: ${JSON.stringify(claim.files_touched || [])}`,
+    ``,
+    `HARD RULES:`,
+    `1. READ-ONLY. Allowed: \`git diff --stat\`, \`git status --porcelain\`, re-running IDEMPOTENT verification commands (tests / lint / build / \`npm run audit:*\`), read-only SELECT queries.`,
+    `2. NEVER mutate state: no migration apply, no INSERT/UPDATE/DELETE, no git commit/push, no file writes. If the goal file's Verification section lists a state-mutating command, DO NOT run it — inspect git/DB read-only instead and say so in evidence.`,
+    `3. You may only TIGHTEN, never loosen. claim verified + you confirm → "verified"; claim verified + you cannot confirm (a file in files_touched shows no git diff, OR a re-run verification command fails, OR the evidence does not match reality) → "failed". claim done + files actually changed → "done"; claim done + nothing changed → "failed".`,
+    ``,
+    `STEPS:`,
+    `a. Read ${goalPath} to learn the REAL mechanical checks (do not trust the executor for what they are).`,
+    `b. For each file in files_touched run \`git diff --stat -- <file>\` (or git status) and confirm it actually changed.`,
+    `c. Re-run each IDEMPOTENT verification command yourself; capture the real exit code / output tail. Skip + note any mutating command (rule 2).`,
+    `d. Put what YOU observed (git stat lines, exit codes) in scorecard_evidence — NOT the executor's words. List every claim-vs-reality gap in discrepancies. Set upheld=false if you tightened the status.`,
+    `e. Output is consumed by a pipeline, not a human: return only the structured verdict.`,
+  ].join('\n')
+}
+
+async function runScorecard(id, claim, mode) {
+  if (mode === 'off' || !needsTier2(claim.status)) return claim
+  const t1 = tier1Incoherence(claim)
+  if (t1.length) {
+    log(`🔻 scorecard[T1] ${id}: ${claim.status} → failed (${t1.length} self-contradiction${t1.length > 1 ? 's' : ''})`)
+    return mergeTier1Downgrade(claim, t1)
+  }
+  if (mode === 'cheap') return claim
+  // Tier-2 — independent read-only auditor. Refinement: the auditor must not be
+  // weaker than the executor it audits (a haiku judging an opus goal is a weak
+  // judge), so it runs at the goal's own tier.
+  const verdict = await agent(scorecardPrompt(goals.get(id), claim), {
+    label: `scorecard:${id}`, phase: 'Scorecard', model: TIER[goals.get(id).model_tier], schema: VERDICT,
+  })
+  if (!verdict) {   // auditor died → fail-closed-but-calibrated (unconfirmed ≠ verified)
+    const fc = failClosedNoAudit(claim)
+    if (fc.status !== claim.status) log(`🔻 scorecard[T2] ${id}: ${claim.status} → ${fc.status} (auditor unavailable, fail-closed)`)
+    return fc
+  }
+  const merged = mergeTier2(claim, verdict)
+  if (merged.status !== claim.status) log(`🔻 scorecard[T2] ${id}: ${claim.status} → ${merged.status}`)
+  return merged
+}
+
+const results = new Map()   // id → structured result (post-scorecard)
 const blockedBy = new Map() // id → upstream id that blocked it
 
 function upstreamOk(id) {
@@ -230,9 +360,10 @@ for (let i = 0; i < batches.length; i++) {
       phase: 'Execute',
       model: TIER[goals.get(id).model_tier],
       schema: RESULT,
-    }).then(r => {
-      results.set(id, r || { goal_id: id, status: 'failed', verify: { passed: false, evidence: 'executor agent returned null (skipped or terminal error)' } })
     })
+      .then(r => r || { goal_id: id, status: 'failed', verify: { passed: false, evidence: 'executor agent returned null (skipped or terminal error)' } })
+      .then(claim => runScorecard(id, claim, scorecard))   // independent audit before it counts
+      .then(final => results.set(id, final))
   if (serial) { for (const id of runnable) await run(id)() }
   else await parallel(runnable.map(run))
   // intra-batch file-collision tripwire: parallel goals that touched the same
@@ -272,6 +403,8 @@ const summary = {
   done: count('done'),
   blocked: count('blocked'),
   failed: count('failed'),
+  // goals the independent auditor tightened (self-report ≠ ground truth)
+  scorecard_downgrades: perGoal.filter(p => p.scorecard && p.scorecard.upheld === false).length,
   questions: perGoal.filter(p => p.status === 'blocked' && p.blocked_question).map(p => ({ id: p.id, question: p.blocked_question })),
   // goals whose acceptance criteria were NOT fully executed — the bridge skill
   // must surface these as a manual-verification checklist; done ≠ accepted.
@@ -280,7 +413,7 @@ const summary = {
   // bridge skill must audit every expectation: was it picked up by its target?
   handoffs: perGoal.flatMap(p => (p.handoffs || []).map(h => ({ from: p.id, ...h }))),
 }
-log(`done: ${summary.verified} verified / ${summary.done} done-未驗 / ${summary.blocked} blocked / ${summary.failed} failed`)
+log(`done: ${summary.verified} verified / ${summary.done} done-未驗 / ${summary.blocked} blocked / ${summary.failed} failed${summary.scorecard_downgrades ? ` — ⚠️ ${summary.scorecard_downgrades} scorecard downgrade${summary.scorecard_downgrades > 1 ? 's' : ''} (self-report ≠ ground truth)` : ''}`)
 if (summary.needs_manual_verification.length) {
   log(`⚠ 未驗收（status=done）：${summary.needs_manual_verification.join(', ')} — 這些 goal 的驗收條件尚未被任何人執行，詳見各 goal notes 的 UNVERIFIED: 行`)
 }

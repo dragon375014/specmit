@@ -6,6 +6,10 @@
   "bin": {
     "specmit": "bin/pipeline.js"
   },
+  "scripts": {
+    "check": "node scripts/check-syntax.mjs",
+    "test": "node scripts/check-syntax.mjs && node lib/scorecard-logic.test.mjs"
+  },
   "engines": {
     "node": ">=18.0.0"
   },

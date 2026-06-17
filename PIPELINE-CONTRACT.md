@@ -45,7 +45,7 @@ Fields deliberately **not** read: `contracts[]`, `goals[].module_ref`, `goals[].
 
 After a run, the bridge skill writes back into `goal-graph.json`:
 
-- **May change**: `goals[].status` only. Legal values written: `in-progress` → `done` / `verified` / `blocked`（schema 已內建這些 runtime 值——欄位本身就是為執行期設計的）。
+- **May change**: `goals[].status` only. Legal values written: `in-progress` → `done` / `verified` / `blocked`（schema 已內建這些 runtime 值——欄位本身就是為執行期設計的）。寫回的 status 是**獨立 scorecard 稽核後的值**（棘輪只會收緊，不會放寬），不是 executor 自報的原值。
 - **Must never touch**: any other field of `goal-graph.json`; any file under `adapters/`（投影，只能重新生成）; any `goals/G*.md` or `contracts/C*.md`（凍結）。
 - Writeback is idempotent: re-running with `only:` updates just the re-run goals.
 
@@ -60,12 +60,16 @@ After a run, the bridge skill writes back into `goal-graph.json`:
   "contract_version": "1.0",
   "plan_source": "decomposer execution_plan.batches",
   "summary": { "verified": 5, "done": 1, "blocked": 1, "failed": 0,
+               "scorecard_downgrades": 1,
                "questions": [{ "id": "G4b", "question": "..." }] },
   "goals": [ { "id": "G1", "title": "...", "status": "verified",
                "verify": { "passed": true, "evidence": "node test/g1.test.js → 4/4 pass" },
-               "files_touched": ["server/room.js"], "notes": "" } ]
+               "files_touched": ["server/room.js"], "notes": "",
+               "scorecard": { "upheld": true, "tier": 2, "discrepancies": [] } } ]
 }
 ```
+
+> `scorecard` is a **runner-owned annotation** (this repo owns run-report) — `upheld:false` means the independent auditor tightened the executor's self-report. The runner only ever reads the §3 graph subset and only ever writes back `status` (§4), so adding this annotation needs **no `contract_version` bump**; it stays at 1.0.
 
 ## 6. Executor agent I/O contract
 

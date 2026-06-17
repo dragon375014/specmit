@@ -91,13 +91,26 @@ Workflow({
     specDir: 'spec',
     projectDir: '.',
     serial: false,        // 平行 agent 撞共享檔時的逃生口 → true
-    only: null            // resume：只重跑指定 goal ids，上游信任 graph 內 prior status
+    only: null,           // resume：只重跑指定 goal ids，上游信任 graph 內 prior status
+    scorecard: 'full'     // 獨立驗證棘輪：'full'(預設) / 'cheap'(只 Tier-1) / 'off'(退回無稽核)
   }
 })
 ```
 
 batch 內平行的安全性由 goal-decomposer 的模組分解保證（這正是依賴圖存在的意義）；
 真撞檔 → `serial: true` 重跑，或對撞檔 goals 用 `only:` 分兩波。
+
+**scorecard（驗證棘輪）— 預設開，通常不用動**：每個自報 verified/done 的 goal，加派一個
+**獨立、唯讀、只能收緊**的稽核員（球員兼裁判 → 唯讀稽核員）：Tier-1 純 JS 抓自相矛盾、
+Tier-2 fresh agent 重跑冪等驗證指令 + git diff 反查 ground truth。`pickTighter` 保證它**只能降、
+不能升**；稽核員 tier 不低於 executor；稽核員死掉 fail-closed（verified→done + 標記，不打 failed）。
+- `cheap`：只跑免費的 Tier-1（快、零 token，仍抓「說 verified 卻無證據」）。
+- `off`：完全退回無稽核（回歸測試逃生口）。
+
+**內圈 vs 外圈邊界**（這支 skill 守的線）：scorecard 屬**內圈**（機器自動做、每個 goal 內、只收緊）。
+它**永遠不碰 spec、不改 scope、不替使用者接受未驗的工作**——那些是**外圈**（人）：blocked 問題、
+failed/降級 goal 的處置、改 goal 還是改 spec、接受 done。一句話：**動到 scope/spec/接受未驗 → 人；
+讓既定 goal 通過它自己既定的驗證 → 機器。**
 
 ## Step 3 — 落地（workflow 回來之後，bridge 的責任）
 
@@ -110,6 +123,9 @@ batch 內平行的安全性由 goal-decomposer 的模組分解保證（這正是
    逐條抽出，寫 `runs/<run-id>/manual-verification.md` 並完整呈給使用者。
    **報告措辭規則：done ≠ 驗收完成。** 標題行必須寫成「verified X / done-未驗 Y」，
    不得讓 done 與 verified 合併讀成全綠（曾發生 24 條驗收無人執行卻被讀成全勝的事故）
+6. `summary.scorecard_downgrades > 0` → 獨立稽核員把某些 goal 收緊了（自報 ≠ ground truth）。
+   逐條把被降級的 goal（`p.scorecard.upheld === false`）連同 `p.scorecard.discrepancies`（稽核員
+   實際觀察到的落差）呈給使用者——**這是「球員兼裁判被抓到」的出口，務必明顯標出，不可淹沒在綠燈裡。**
 
 ## 失敗模式速查
 
