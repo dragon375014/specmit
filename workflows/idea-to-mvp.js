@@ -13,6 +13,12 @@ export const meta = {
 // ============================================================================
 // idea-to-mvp — pipeline runner (L3) for the dragon375014 toolchain
 //
+// ⛔ SYNTAX CHECK: run `npm run check`, NOT `node --check`. This file uses
+//    top-level await + return and is ESM-detected (type:module), so node --check
+//    falsely rejects it — but the Workflow engine wraps the body in an async
+//    function (injecting agent/log/phase/...), where both are legal. See
+//    scripts/check-syntax.mjs for the correct (engine-shaped) check.
+//
 // LOOSE COUPLING IS THE LAW HERE:
 //   - imports nothing, calls no repo code; the only interface is data:
 //     args.graph (parsed goal-graph.json, schema 1.0 — canonical schema lives
