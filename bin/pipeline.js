@@ -46,7 +46,8 @@ async function fetchText(url) {
   return res.text()
 }
 
-async function installFile(repo, src, destAbs, force) {
+async function installFile(repo, src, destAbs, force, dry) {
+  if (dry) { console.log(D(`   would install: ${destAbs}`)); return }
   if (!force && existsSync(destAbs)) { skip(destAbs); return }
   const url = `https://raw.githubusercontent.com/${repo}/main/${src}`
   const content = await fetchText(url)
@@ -70,29 +71,37 @@ function parseFrontmatter(text) {
 // ─── commands ────────────────────────────────────────────────────────────────
 async function cmdInit(argv) {
   const force = argv.includes('--force')
+  const dry = argv.includes('--dry') || argv.includes('--dry-run')
   const cwd = process.cwd()
-  console.log(`\n${B('specmit')} — init  (v${VERSION})${force ? Y(' [--force]') : ''}`)
+  console.log(`\n${B('specmit')} — init  (v${VERSION})${force ? Y(' [--force]') : ''}${dry ? Y(' [--dry]') : ''}`)
 
-  h('1/3  Global skills  →  ' + GLOBAL_BASE)
+  h('1/4  Global skills  →  ' + GLOBAL_BASE)
   for (const [repo, src, rel] of GLOBAL) {
-    await installFile(repo, src, join(GLOBAL_BASE, rel), force)
+    await installFile(repo, src, join(GLOBAL_BASE, rel), force, dry)
   }
 
-  h('2/3  Project skills  →  ' + cwd + '/.claude/')
+  h('2/4  Project skills  →  ' + cwd + '/.claude/')
   for (const [repo, src, rel] of PROJECT) {
-    await installFile(repo, src, join(cwd, rel), force)
+    await installFile(repo, src, join(cwd, rel), force, dry)
   }
 
-  h('3/3  Folder structure')
+  h('3/4  Folder structure')
   for (const dir of DIRS) {
     const abs = join(cwd, dir)
+    if (dry) { console.log(D(`   would create: ${dir}/`)); continue }
     if (!existsSync(abs)) { mkdirSync(abs, { recursive: true }); ok(dir + '/') }
     else skip(dir + '/')
   }
 
+  // 4/4 — the half init was missing: write the always-loaded resource index so
+  // this machine actually "wakes up". Without this, init drops files Claude
+  // never sees on its load path and a fresh machine still feels dumb.
+  h('4/4  Awaken this machine  →  resource index Claude reads every session')
+  await cmdAwaken(dry ? ['--dry'] : [])
+
   console.log(`\n${G(B('All done.'))}`)
   console.log('\nNext:')
-  console.log('  1. Open Claude Code in this folder')
+  console.log('  1. Open a NEW Claude Code chat here and say 「嗨」 → it should report what this machine has')
   console.log('  2. Say  「我想做一個...」          → idea-to-spec  (5–7 輪收斂)')
   console.log('  3. Say  「幫我分解這份規格」        → goal-decomposer')
   console.log('  4. Say  「跑完整管線」              → specmit → parallel execution\n')
@@ -168,8 +177,9 @@ switch (cmd) {
   default:
     console.log(`\n${B('specmit')}  v${VERSION}\n`)
     console.log('Usage:')
-    console.log('  npx specmit init               — install all skills + create folders')
-    console.log('  npx specmit awaken             — scan this machine (~/.claude) and write a resource index Claude reads every session')
+    console.log('  npx specmit init               — install skills + folders, then awaken this machine (one-command cold start)')
+    console.log('  npx specmit init --dry         — preview the full init (skills + awaken), write nothing')
+    console.log('  npx specmit awaken             — (re)scan this machine (~/.claude) and write the resource index Claude reads every session')
     console.log('  npx specmit awaken --project   — same, but scope to the current project folder')
     console.log('  npx specmit awaken --dry       — preview what would be written, change nothing')
     console.log('  npx specmit sync               — update all skills to latest (--force)')

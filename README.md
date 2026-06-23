@@ -71,9 +71,10 @@ Why the dial is safe to crank up:
 
 ## How to use
 
-1. Install — one command (installs the spec-sonar skills, this repo's bridge skill + workflow, and scaffolds `spec/` + `runs/`):
+1. Install — one command (installs the spec-sonar skills, this repo's bridge skill + workflow, scaffolds `spec/` + `runs/`, **then awakens the machine** — step 4/4 writes the resource index into `~/.claude/CLAUDE.md` so the very next session knows what it has):
    ```bash
-   npx specmit init
+   npx specmit init          # install + awaken (one-command cold start)
+   npx specmit init --dry    # preview everything it would do, write nothing
    ```
    Or copy manually:
    ```
