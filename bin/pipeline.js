@@ -2,8 +2,9 @@
 import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { homedir } from 'node:os'
+import { cmdAwaken } from './awaken.js'
 
-const VERSION = '0.2.1'
+const VERSION = '0.4.0'
 
 // ANSI colours (no deps)
 const B  = s => `\x1b[1m${s}\x1b[0m`
@@ -163,12 +164,16 @@ switch (cmd) {
   case 'init':    run(cmdInit);    break
   case 'contrib': run(cmdContrib); break
   case 'sync':    run(cmdSync);    break
+  case 'awaken':  run(cmdAwaken);  break
   default:
     console.log(`\n${B('specmit')}  v${VERSION}\n`)
     console.log('Usage:')
-    console.log('  npx specmit init     — install all skills + create folders')
-    console.log('  npx specmit sync     — update all skills to latest (--force)')
-    console.log('  npx specmit contrib  — show diff for non-canonical skills, print PR steps')
+    console.log('  npx specmit init               — install all skills + create folders')
+    console.log('  npx specmit awaken             — scan this machine (~/.claude) and write a resource index Claude reads every session')
+    console.log('  npx specmit awaken --project   — same, but scope to the current project folder')
+    console.log('  npx specmit awaken --dry       — preview what would be written, change nothing')
+    console.log('  npx specmit sync               — update all skills to latest (--force)')
+    console.log('  npx specmit contrib            — show diff for non-canonical skills, print PR steps')
     console.log('')
     process.exit(cmd ? 1 : 0)
 }

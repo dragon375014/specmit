@@ -86,6 +86,24 @@ Why the dial is safe to crank up:
    - graph + goals present → pre-flight checks, then launches the workflow
 3. Read `runs/<run-id>/run-report.json`. BLOCKED questions come back to you (executors never guess); answer them and resume with `only: [ids]`.
 
+## Cold-start: `specmit awaken`
+
+`init` installs files — but a fresh machine still feels *dumb*, because those files aren't on Claude's every-session load path (project `CLAUDE.md` / project `.claude/skills` / memory). `awaken` fixes exactly that: it scans a scope and writes a compact, **active** resource index into the one file Claude reads at the start of every conversation (`CLAUDE.md`), plus a fuller `RESOURCES.md` drill-down.
+
+冷啟動喚醒：`init` 只搬檔案，新機器仍「不精明」，因為那些檔不在 Claude 每次必載的路徑上。`awaken` 掃描範圍後，把一份精簡、會驅動行為的資源索引寫進 `CLAUDE.md`（每次對話必載），讓下一個 session 一開口就知道自己有哪些資源可用。
+
+```bash
+npx specmit awaken            # scan this machine (~/.claude): global skills, ecosystem repos, MCP servers, memory
+npx specmit awaken --project  # scan the current project: its .claude/skills, docs, SSOT registries, migrations…
+npx specmit awaken --dry      # preview exactly what would be written, change nothing
+```
+
+- **Idempotent** — re-running replaces the `<!-- AWAKEN:… -->` block in place, never duplicates. Re-run any time to refresh.
+- **Reports gaps** — missing expected global skills and un-cloned ecosystem repos are flagged with the one-liner to fix them.
+- **Acceptance test (「有感」)** — after running it, open a *new* Claude session and say 「嗨」: it should open by telling you what resources this machine / project has, instead of a blank stare. If nothing changed, it didn't land — that's the bar.
+
+It's Tier-1 and deterministic (zero LLM, re-runnable); a Tier-2 curation skill that enriches the raw index is a separate, later piece.
+
 ## Repo layout
 
 ```
@@ -95,7 +113,8 @@ workflows/idea-to-mvp.js      L3 — Dynamic Workflow runner (validate → execu
 lib/scorecard-logic.mjs       pure decision core SSOT (inlined verbatim into the runner; drift-guarded)
 lib/scorecard-logic.test.mjs  zero-dep unit tests + behavioral drift guard (node lib/scorecard-logic.test.mjs)
 skills/specmit/               L3b — bridge skill (trigger + pre-flight + writeback)
-bin/pipeline.js               the `specmit` npm CLI (init / sync / contrib)
+bin/pipeline.js               the `specmit` npm CLI (init / awaken / sync / contrib)
+bin/awaken.js                 cold-start scanner — writes the always-loaded resource index (init's missing half)
 ```
 
 ## Design highlights
