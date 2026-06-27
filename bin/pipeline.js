@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path'
 import { homedir } from 'node:os'
 import { cmdAwaken } from './awaken.js'
 
-const VERSION = '0.4.1'
+const VERSION = '0.4.2'
 
 // ANSI colours (no deps)
 const B  = s => `\x1b[1m${s}\x1b[0m`
@@ -30,6 +30,11 @@ const GLOBAL = [
   ['dragon375014/spec-sonar', 'skills/goal-decomposer/SKILL.md',                           'goal-decomposer/SKILL.md'],
   ['dragon375014/spec-sonar', 'skills/goal-decomposer/references/goal-graph.schema.json',   'goal-decomposer/references/goal-graph.schema.json'],
   ['dragon375014/spec-sonar', 'skills/goal-decomposer/references/output-directory-spec.md', 'goal-decomposer/references/output-directory-spec.md'],
+  // spec-sonar: brownfield 補全 entry — triggers Audit Mode on an existing project.
+  // The skill is a thin orchestrator; it reads the mode doc + scanner shipped alongside it.
+  ['dragon375014/spec-sonar', 'skills/audit-existing-project/SKILL.md',                     'audit-existing-project/SKILL.md'],
+  ['dragon375014/spec-sonar', 'modes/audit-mode.md',                                        'audit-existing-project/references/audit-mode.md'],
+  ['dragon375014/spec-sonar', 'tools/project-scanner.py',                                   'audit-existing-project/references/project-scanner.py'],
   // specmit: bridge skill global so Claude finds it in every project
   ['dragon375014/specmit', 'skills/specmit/SKILL.md',                        'specmit/SKILL.md'],
 ]
@@ -130,7 +135,8 @@ async function cmdInit(argv) {
   console.log(`\n${G(B('All done.'))}`)
   console.log('\nNext:')
   console.log('  1. Open a NEW Claude Code chat here and say 「嗨」 → it should report what this machine has')
-  console.log('  2. Say  「我想做一個...」          → idea-to-spec  (5–7 輪收斂)')
+  console.log('  2. 全新想法：說 「我想做一個...」  → idea-to-spec  (5–7 輪收斂)')
+  console.log('  2b. 既有專案：說「幫我補全這個專案」 → audit-existing-project  (體檢→補全；或 `npx specmit complete`)')
   console.log(`  3. 每一站做完會${G('自動提議下一棒')}（階段交接 hook）— 按一下就接，不必再打「分解」「跑管線」`)
   console.log(D('     hook 只在 Claude Code 生效；其他平台仍走 skill 的軟提議（可攜不掉）\n'))
 }
@@ -193,15 +199,38 @@ async function cmdSync(argv) {
   await cmdInit(['--force'])
 }
 
+// Brownfield "complete an existing project" affordance. `init` already installs the
+// audit-existing-project skill globally; this is a discoverability button for people who
+// installed but don't know how to kick off the brownfield flow. It (re)installs the three
+// brownfield files (so a stale install gets them) and prints the trigger phrase.
+async function cmdComplete(argv) {
+  const force = argv.includes('--force')
+  const dry = argv.includes('--dry') || argv.includes('--dry-run')
+  console.log(`\n${B('specmit')} — complete  (v${VERSION})${dry ? Y(' [--dry]') : ''}`)
+
+  h('Brownfield 補全 / 體檢 — ensure entry installed  →  ' + GLOBAL_BASE)
+  const brownfield = GLOBAL.filter(([, , rel]) => rel.startsWith('audit-existing-project/'))
+  for (const [repo, src, rel] of brownfield) {
+    await installFile(repo, src, join(GLOBAL_BASE, rel), force, dry)
+  }
+
+  console.log(`\n${G(B('Ready.'))} 開新的 Claude Code 對話，在你要體檢的既有專案資料夾裡說：`)
+  console.log(`\n  ${B('「幫我補全這個專案」')}  /  ${B('「audit 一下這個專案缺什麼」')}\n`)
+  console.log('它會：偵測 project-scanner → 跑 Audit Mode（暗區四態 + archetype 完備性 + 網頁/Supabase 安全 lens）')
+  console.log('      → triage（fix-now / roadmap / intentional）→ 問你要修哪幾個 → 分解成 goal 接力跑。')
+  console.log(D('\n  從零開始的新想法請改說「我想做一個…」（idea-to-spec）；單一任務打磨用 goal。\n'))
+}
+
 // ─── router ──────────────────────────────────────────────────────────────────
 const [,, cmd, ...rest] = process.argv
 const run = fn => fn(rest).catch(e => fail(e.message))
 
 switch (cmd) {
-  case 'init':    run(cmdInit);    break
-  case 'contrib': run(cmdContrib); break
-  case 'sync':    run(cmdSync);    break
-  case 'awaken':  run(cmdAwaken);  break
+  case 'init':     run(cmdInit);     break
+  case 'contrib':  run(cmdContrib);  break
+  case 'sync':     run(cmdSync);     break
+  case 'awaken':   run(cmdAwaken);   break
+  case 'complete': run(cmdComplete); break
   default:
     console.log(`\n${B('specmit')}  v${VERSION}\n`)
     console.log('Usage:')
@@ -210,6 +239,7 @@ switch (cmd) {
     console.log('  npx specmit awaken             — (re)scan this machine (~/.claude) and write the resource index Claude reads every session')
     console.log('  npx specmit awaken --project   — same, but scope to the current project folder')
     console.log('  npx specmit awaken --dry       — preview what would be written, change nothing')
+    console.log('  npx specmit complete           — ensure the brownfield 補全/體檢 entry is installed + print how to start')
     console.log('  npx specmit sync               — update all skills to latest (--force)')
     console.log('  npx specmit contrib            — show diff for non-canonical skills, print PR steps')
     console.log('')
