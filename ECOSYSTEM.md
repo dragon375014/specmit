@@ -52,7 +52,8 @@ npx specmit init
 
 | 指令 | 說明 |
 |---|---|
-| `specmit init` | 安裝核心 skill（spec-sonar 兩套 + specmit + idea-to-mvp workflow）+ 建立 spec/ 與 runs/ 資料夾 |
+| `specmit init` | 安裝核心 skill（spec-sonar 三套含 brownfield 補全入口 + specmit + idea-to-mvp workflow）+ 建立 spec/ 與 runs/ 資料夾 |
+| `specmit complete` | 確保 brownfield 補全/體檢入口已裝，並印出怎麼啟動（既有專案說「幫我補全這個專案」） |
 | `specmit sync` | 更新已安裝 skill 到最新 canonical 版本 |
 | `specmit contrib` | 顯示本地修改與 canonical 的差異，印出 PR 步驟 |
 
@@ -62,7 +63,7 @@ npx specmit init
 
 | Repo | Layer | Owns | Reach for it when |
 |---|---|---|---|
-| [spec-sonar](https://github.com/dragon375014/spec-sonar) | converge + decompose | `idea-to-spec`, `goal-decomposer`, Audit / Complex-System / Conflict-Analysis modes, project-scanner, 4 platform adapters. **+ 2026-06: completeness baseline (archetype axis), Audit Mode security lens + audit→fix kickoff, capability-gated house-profile read, AskUserQuestion stage-handoff offers (ADR-002~006)** | "I have a product idea" / "decompose this spec" / "audit this design for blind spots" / "complete / security-scan an existing project" |
+| [spec-sonar](https://github.com/dragon375014/spec-sonar) | converge + decompose | `idea-to-spec`, `audit-existing-project` (brownfield entry skill), `goal-decomposer`, Audit / Complex-System / Conflict-Analysis modes, project-scanner, 4 platform adapters. **+ 2026-06: completeness baseline (archetype axis), Audit Mode security lens + audit→fix kickoff, capability-gated house-profile read, AskUserQuestion stage-handoff offers, brownfield 補全 entry skill (ADR-002~008)** | "I have a product idea" / "decompose this spec" / "audit this design for blind spots" / "complete / security-scan an existing project" |
 | [goal-workflow-designer](https://github.com/dragon375014/goal-workflow-designer) | shape | `goal` (depth), `workflow-shaper` (breadth) | "one task done right" / "same check over many units" |
 | [claude-skills-governance-meta](https://github.com/dragon375014/claude-skills-governance-meta) | govern | `governance-guard` + `step-back-sentinel` templates, `architecture-completeness-guardian` + `trace-lock-modify` + `step-back-review` scaffold skills, adoption fitness check. **+ 2026-06: portable Supabase/web security-gate playbook (`playbooks/supabase-web-security-gate.md`, P0~P2 ruleset — the GOLD classes advisors miss)** | "stop shipping the same class of bug" / "gate architecture changes" / "the security ruleset Audit Mode's security lens scans against" |
 | [agent-work-board](https://github.com/dragon375014/agent-work-board) | coordinate | WORK-BOARD template, claim ritual, footprint methodology | "I run 2+ AI sessions in parallel on one repo" |
@@ -76,8 +77,8 @@ The author also keeps a **private cross-project knowledge vault** (`reuse-hub`) 
 |---|---|---|
 | build a product from a vague idea | spec-sonar `idea-to-spec` | → `goal-decomposer` → execute goals in dependency order |
 | audit an existing design for blind spots | spec-sonar Audit Mode | → remediation goals → `goal-decomposer` |
-| **complete an existing project** (missing pages / media / reachability) | spec-sonar Audit Mode (archetype lens) | → triage fix-now (ADR-006) → `goal-decomposer` → execute |
-| **security-scan a Supabase / web project** | spec-sonar Audit Mode (security lens, ADR-005) | reads governance-meta security-gate playbook; warn-only; allowlist via house-profile |
+| **complete an existing project** (missing pages / media / reachability) | spec-sonar `audit-existing-project` skill (say 「補全這個專案」, or `npx specmit complete`) → Audit Mode (archetype lens) | → triage fix-now (ADR-006) → `goal-decomposer` → execute |
+| **security-scan a Supabase / web project** | spec-sonar `audit-existing-project` → Audit Mode (security lens, ADR-005) | reads governance-meta security-gate playbook; warn-only; allowlist via house-profile |
 | get one task done deep and converged | goal-workflow-designer `goal` | paste the emitted `/goal` prompt |
 | run the same check/change across many units | goal-workflow-designer `workflow-shaper` | WORTH-IT gate first; paste the workflow prompt |
 | stop a recurring bug class | claude-skills-governance-meta | run the adoption fitness check, then copy a template |
@@ -101,11 +102,13 @@ A round of work (recorded as **ADR-001 ~ 007** in spec-sonar `DESIGN-NOTES.md`) 
 spec-sonar goal-decomposer ──reads (capability-gated)──▶ reuse-hub  house-profile.json   (ADR-003; private values, never leaked)
 spec-sonar Audit Mode (security lens) ──references──▶ governance-meta  supabase-web-security-gate.md   (ADR-005; public ruleset)
 specmit  init ──installs──▶ project .claude/  stage-handoff hooks   (ADR-007; deterministic offer, Claude-Code-only, soft offer is the portable fallback)
+specmit  init ──installs──▶ ~/.claude/skills/  audit-existing-project (+ audit-mode.md + project-scanner.py)   (ADR-008; brownfield entry, auto-triggerable)
 Audit Mode A7 ──triage fix-now──▶ goal-decomposer ──▶ specmit   (ADR-006; brownfield "complete the project" loop)
 ```
 
 What the layer adds, by theme:
 - **Completeness** (ADR-002): a per-deliverable-type *completeness baseline* (archetype axis) so the pipeline checks "does this *kind* of thing have what it should," not just internal consistency. Lives in `dark-zone-baseline.md`, so both from-zero (idea-to-spec) and brownfield (Audit Mode) get it.
+- **Brownfield entry** (ADR-008): a thin `audit-existing-project` skill is the auto-triggerable front door for "complete / audit an existing project" — symmetric to `idea-to-spec`'s from-zero front door. `specmit init` installs it (with the Audit Mode doc + scanner); it orchestrates Audit Mode but holds none of the criteria. Closes the `connector-needed` gap.
 - **Private-knowledge injection** (ADR-003): public engine defines a `house-profile` *slot*; the private vault holds the *values*; goal-decomposer reads it if present, degrades to neutral defaults if not.
 - **Handoffs** (ADR-004 + 007): each stage proactively offers the next step (AskUserQuestion soft offer) — propose, don't auto-advance; a PostToolUse hook hardens the offer deterministically *in Claude Code only*, keeping portability.
 - **Security** (ADR-005): a portable Supabase/web security ruleset (governance-meta) + a warn-only Audit Mode lens that scans against it, with intentional-exception allowlists in the private house-profile.
@@ -113,7 +116,7 @@ What the layer adds, by theme:
 
 **The recurring law** all of these share: *capability-gated (detect the tool, not the identity) + public mechanism / private values + propose, don't auto-advance.*
 
-> ⚠️ **Known follow-up (`connector-needed`)**: the brownfield "complete an existing project" entry isn't yet auto-triggerable from a fresh `specmit init` — `modes/audit-mode.md` isn't in the install manifest, and no skill description matches "complete / audit this existing project." Until that's wired, the brownfield flow is reached by the agent reading Audit Mode from the spec-sonar repo directly.
+> ✅ **`connector-needed` resolved (2026-06-27, ADR-008)**: the brownfield "complete an existing project" entry is now auto-triggerable from a fresh `specmit init`. spec-sonar ships a thin `skills/audit-existing-project/` whose description matches "補全 / 體檢 / audit this existing project / what's missing"; `specmit init` installs it globally along with `modes/audit-mode.md` and `tools/project-scanner.py` (into the skill's `references/`). Saying 「幫我補全這個專案」 (or running `npx specmit complete`) now reaches Audit Mode → A7 triage → goal-decomposer without the agent having to read the spec-sonar repo by hand.
 
 ## Canonical ownership — multi-copy skills
 
@@ -121,7 +124,7 @@ Several skills exist in more than one place. **The repo copy is canonical; insta
 
 | Skill | Canonical home | Installed copies live at |
 |---|---|---|
-| `idea-to-spec`, `goal-decomposer` | spec-sonar `skills/` | `~/.claude/skills/` |
+| `idea-to-spec`, `audit-existing-project`, `goal-decomposer` | spec-sonar `skills/` | `~/.claude/skills/` (`audit-existing-project` also ships `references/audit-mode.md` + `references/project-scanner.py`, canonical at spec-sonar `modes/` + `tools/`) |
 | `goal`, `workflow-shaper` | goal-workflow-designer `skills/` | `~/.claude/skills/`, project `.claude/skills/` |
 | `architecture-completeness-guardian`, `trace-lock-modify`, `step-back-review` | claude-skills-governance-meta `scaffold/skills/` | project `.claude/skills/` (customized) |
 | `specmit`, `idea-to-mvp.js` | specmit `skills/` + `workflows/` | project `.claude/skills/`, `.claude/workflows/` (frontmatter `canonical: false`) |

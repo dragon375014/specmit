@@ -1,6 +1,6 @@
 {
   "name": "specmit",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "One-command installer for the dragon375014 AI dev toolchain: idea → spec → goals → parallel execution. specmit = spec + submit + MIT (Made in Taiwan).",
   "type": "module",
   "bin": {

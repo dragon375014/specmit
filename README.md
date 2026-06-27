@@ -85,6 +85,8 @@ Why the dial is safe to crank up:
    - no spec → defers to `idea-to-spec`
    - spec but no goal graph → defers to `goal-decomposer`
    - graph + goals present → pre-flight checks, then launches the workflow
+
+   Or, for an **existing project** you want to audit/complete rather than build from zero, say **「幫我補全這個專案」 / "audit this existing project"** → the `audit-existing-project` skill runs Audit Mode → triage → handoff (or run `npx specmit complete` for the kickoff button).
 3. Read `runs/<run-id>/run-report.json`. BLOCKED questions come back to you (executors never guess); answer them and resume with `only: [ids]`.
 
 ## Cold-start: `specmit awaken`
