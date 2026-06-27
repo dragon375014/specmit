@@ -58,7 +58,15 @@ export const meta = {
 // }
 // ============================================================================
 
-const A = args || {}
+let A = args || {}
+// Defensive: some Workflow harnesses deliver `args` as a JSON-encoded STRING
+// rather than a parsed object (the stringified-args failure mode — observed in
+// the field: two runs threw here in 4–13ms before any agent spawned, because
+// `A.graph` was undefined on a string `A`). Parse it back so the runner reads
+// the graph as intended; a genuine object passes through untouched, so this is
+// a no-op on harnesses that already deliver parsed args.
+if (typeof A === 'string') { try { A = JSON.parse(A) } catch { /* fall through to the clear guard below */ } }
+if (A && typeof A.graph === 'string') { try { A.graph = JSON.parse(A.graph) } catch { /* guard below */ } }
 const graph = A.graph
 if (!graph || !Array.isArray(graph.goals) || graph.goals.length === 0) {
   throw new Error('args.graph missing or empty — the specmit skill must pass parsed goal-graph.json')
