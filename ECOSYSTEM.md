@@ -68,7 +68,7 @@ npx specmit init
 | [agent-work-board](https://github.com/dragon375014/agent-work-board) | coordinate | WORK-BOARD template, claim ritual, footprint methodology | "I run 2+ AI sessions in parallel on one repo" |
 | [specmit](https://github.com/dragon375014/specmit) | run + front door | this map, `PIPELINE-CONTRACT.md` (consumer contract pinning goal-graph 1.0), `idea-to-mvp` workflow runner, `specmit` bridge skill, the `specmit` npm CLI (`bin/`) | "run the whole spec→goals→execution pipeline in one command" / "where do I start?" |
 
-The author also keeps a **private cross-project knowledge vault** (`ai-dev-toolkit`) — it is not required for any workflow above; everything public lives in the five repos in this table.
+The author also keeps a **private cross-project knowledge vault** (`reuse-hub`) — a `reuse-manifest` (which existing code to copy-fork) plus a `house-profile` (the author's default handling for recurring sharp-edges: media upload, payment callbacks, new-table grants, …). `goal-decomposer` **optionally** consumes a local house-profile through a **capability-gated slot** (`./.reuse/house-profile.json` ▸ `$HOUSE_PROFILE` ▸ neutral default) and bakes the values into the contracts it generates — public users without one simply get neutral defaults and a normal run (see spec-sonar `DESIGN-NOTES.md` ADR-003). The vault itself is not required by any workflow above; everything those workflows *need* lives in the public repos in this table.
 
 ## Routing rules
 
