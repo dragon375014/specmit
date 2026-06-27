@@ -67,7 +67,7 @@ npx specmit init
 | [goal-workflow-designer](https://github.com/dragon375014/goal-workflow-designer) | shape | `goal` (depth), `workflow-shaper` (breadth) | "one task done right" / "same check over many units" |
 | [claude-skills-governance-meta](https://github.com/dragon375014/claude-skills-governance-meta) | govern | `governance-guard` + `step-back-sentinel` templates, `architecture-completeness-guardian` + `trace-lock-modify` + `step-back-review` scaffold skills, adoption fitness check. **+ 2026-06: portable Supabase/web security-gate playbook (`playbooks/supabase-web-security-gate.md`, P0~P2 ruleset — the GOLD classes advisors miss)** | "stop shipping the same class of bug" / "gate architecture changes" / "the security ruleset Audit Mode's security lens scans against" |
 | [agent-work-board](https://github.com/dragon375014/agent-work-board) | coordinate | WORK-BOARD template, claim ritual, footprint methodology | "I run 2+ AI sessions in parallel on one repo" |
-| [specmit](https://github.com/dragon375014/specmit) | run + front door | this map, `PIPELINE-CONTRACT.md` (consumer contract pinning goal-graph 1.0), `idea-to-mvp` workflow runner, `specmit` bridge skill, the `specmit` npm CLI (`bin/`). **+ 2026-06: deterministic stage-handoff hooks (`hooks/pipeline-stage-notifier.mjs`); `init` installs them into `.claude/` (ADR-007)** | "run the whole spec→goals→execution pipeline in one command" / "where do I start?" |
+| [specmit](https://github.com/dragon375014/specmit) | run + front door | this map, `PIPELINE-CONTRACT.md` (consumer contract pinning goal-graph 1.0), `idea-to-mvp` workflow runner, `specmit` bridge skill, the `specmit` npm CLI (`bin/`, ≥ 0.4.2). **+ 2026-06: deterministic stage-handoff hooks (`hooks/pipeline-stage-notifier.mjs`); `init` installs them into `.claude/` (ADR-007); `init` also installs the brownfield `audit-existing-project` entry + a `complete` verb (ADR-008)** | "run the whole spec→goals→execution pipeline in one command" / "complete an existing project" / "where do I start?" |
 
 The author also keeps a **private cross-project knowledge vault** (`reuse-hub`) — a `reuse-manifest` (which existing code to copy-fork) plus a `house-profile` (the author's default handling for recurring sharp-edges: media upload, payment callbacks, new-table grants, …). `goal-decomposer` **optionally** consumes a local house-profile through a **capability-gated slot** (`./.reuse/house-profile.json` ▸ `$HOUSE_PROFILE` ▸ neutral default) and bakes the values into the contracts it generates — public users without one simply get neutral defaults and a normal run (see spec-sonar `DESIGN-NOTES.md` ADR-003). The vault itself is not required by any workflow above; everything those workflows *need* lives in the public repos in this table.
 
@@ -116,7 +116,9 @@ What the layer adds, by theme:
 
 **The recurring law** all of these share: *capability-gated (detect the tool, not the identity) + public mechanism / private values + propose, don't auto-advance.*
 
-> ✅ **`connector-needed` resolved (2026-06-27, ADR-008)**: the brownfield "complete an existing project" entry is now auto-triggerable from a fresh `specmit init`. spec-sonar ships a thin `skills/audit-existing-project/` whose description matches "補全 / 體檢 / audit this existing project / what's missing"; `specmit init` installs it globally along with `modes/audit-mode.md` and `tools/project-scanner.py` (into the skill's `references/`). Saying 「幫我補全這個專案」 (or running `npx specmit complete`) now reaches Audit Mode → A7 triage → goal-decomposer without the agent having to read the spec-sonar repo by hand.
+> ✅ **`connector-needed` resolved + shipped (2026-06-27, ADR-008; live on npm `specmit@0.4.2`)**: the brownfield "complete an existing project" entry is now auto-triggerable from a fresh install. spec-sonar ships a thin `skills/audit-existing-project/` whose description matches "補全 / 體檢 / audit this existing project / what's missing"; `specmit init` (manifest in `bin/pipeline.js`, **published as 0.4.2** — the version where the manifest first lists these files) installs it globally along with `modes/audit-mode.md` and `tools/project-scanner.py` (into the skill's `references/`). Saying 「幫我補全這個專案」 (or running `npx specmit complete`) now reaches Audit Mode → A7 triage → goal-decomposer without the agent having to read the spec-sonar repo by hand.
+>
+> **Getting it on each machine:** `npx specmit@latest init` on a new project, or **`npx specmit@latest sync`** on a project that already installed an older version (sync = `init --force`, refreshes every skill + the `idea-to-mvp.js` runner to latest `main`). Use `@latest` to dodge a stale npx cache. The brownfield skill is **global** (`~/.claude/skills/`), so one sync per machine arms 「補全」 for every project on it.
 
 ## Canonical ownership — multi-copy skills
 
@@ -139,8 +141,9 @@ Three rules:
 
 - Sibling README `## Ecosystem` sections stay ≤ 10 lines and link here — topology details live in this file only.
 - New repo, or a repo changes role → update the pipeline diagram + tables here in the same PR.
-- Repos publish on `main`; the `specmit` CLI (now ≥ 0.4.1 on npm) fetches raw skill files from each repo's `main`. `specmit sync` pulls the latest.
-- Known follow-ups are tracked as issues labeled `connector-needed`.
+- Repos publish on `main`; the `specmit` CLI (now ≥ 0.4.2 on npm) fetches raw skill files from each repo's `main` at install time — so skill-file changes go live on merge, but **manifest changes (which files to install) ship only in a published CLI version**. Bump + `npm publish` when `bin/pipeline.js`'s install list changes. `specmit sync` (= `init --force`) pulls the latest skill files for an already-installed project.
+- The `idea-to-mvp.js` runner tolerates stringified `args` (JSON-parses a string `args` / `args.graph`) so a goal graph passed as text still runs — fixed 2026-06-27.
+- Known follow-ups are tracked as issues labeled `connector-needed`. **None open as of 2026-06-27** (the brownfield entry was the last one; closed by ADR-008 + `specmit@0.4.2`).
 
 ---
 *Established 2026-06-10 from an ecosystem-wide gap diagnosis; canonical home moved from the private `ai-dev-toolkit` to this repo on 2026-06-12 so the map is reachable by everyone.*
