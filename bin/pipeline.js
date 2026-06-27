@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path'
 import { homedir } from 'node:os'
 import { cmdAwaken } from './awaken.js'
 
-const VERSION = '0.4.0'
+const VERSION = '0.4.1'
 
 // ANSI colours (no deps)
 const B  = s => `\x1b[1m${s}\x1b[0m`
@@ -36,6 +36,8 @@ const GLOBAL = [
 const PROJECT = [
   // workflow stays project-local: scriptPath '.claude/workflows/idea-to-mvp.js' is relative to project cwd
   ['dragon375014/specmit', 'workflows/idea-to-mvp.js', '.claude/workflows/idea-to-mvp.js'],
+  // deterministic stage-handoff hook (Claude Code only; the skill's soft AskUserQuestion offer is the portable fallback)
+  ['dragon375014/specmit', 'hooks/pipeline-stage-notifier.mjs', '.claude/hooks/pipeline-stage-notifier.mjs'],
 ]
 const DIRS = ['spec', 'spec/goals', 'spec/contracts', 'runs']
 
@@ -68,6 +70,31 @@ function parseFrontmatter(text) {
   return out
 }
 
+// Merge the deterministic stage-handoff hook into the project's .claude/settings.json.
+// Idempotent: skips if already present; never clobbers existing settings.
+function mergeHookSettings(cwd, dry) {
+  const settingsPath = join(cwd, '.claude', 'settings.json')
+  const hookEntry = {
+    matcher: 'Write',
+    hooks: [{ type: 'command', command: 'node', args: ['./.claude/hooks/pipeline-stage-notifier.mjs'], timeout: 10 }],
+  }
+  let settings = {}
+  if (existsSync(settingsPath)) {
+    try { settings = JSON.parse(readFileSync(settingsPath, 'utf8')) }
+    catch { warn('.claude/settings.json is not valid JSON — skipping hook merge (add it manually)'); return }
+  }
+  settings.hooks ??= {}
+  settings.hooks.PostToolUse ??= []
+  const already = settings.hooks.PostToolUse.some(e =>
+    (e?.hooks || []).some(hh => (hh?.args || []).some(a => String(a).includes('pipeline-stage-notifier'))))
+  if (already) { skip('.claude/settings.json (stage-handoff hook already present)'); return }
+  if (dry) { console.log(D('   would merge PostToolUse stage-handoff hook into .claude/settings.json')); return }
+  settings.hooks.PostToolUse.push(hookEntry)
+  mkdirSync(dirname(settingsPath), { recursive: true })
+  writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf8')
+  ok('.claude/settings.json (stage-handoff hook merged)')
+}
+
 // ─── commands ────────────────────────────────────────────────────────────────
 async function cmdInit(argv) {
   const force = argv.includes('--force')
@@ -80,10 +107,11 @@ async function cmdInit(argv) {
     await installFile(repo, src, join(GLOBAL_BASE, rel), force, dry)
   }
 
-  h('2/4  Project skills  →  ' + cwd + '/.claude/')
+  h('2/4  Project skills + 階段交接 hook  →  ' + cwd + '/.claude/')
   for (const [repo, src, rel] of PROJECT) {
     await installFile(repo, src, join(cwd, rel), force, dry)
   }
+  mergeHookSettings(cwd, dry)
 
   h('3/4  Folder structure')
   for (const dir of DIRS) {
@@ -103,8 +131,8 @@ async function cmdInit(argv) {
   console.log('\nNext:')
   console.log('  1. Open a NEW Claude Code chat here and say 「嗨」 → it should report what this machine has')
   console.log('  2. Say  「我想做一個...」          → idea-to-spec  (5–7 輪收斂)')
-  console.log('  3. Say  「幫我分解這份規格」        → goal-decomposer')
-  console.log('  4. Say  「跑完整管線」              → specmit → parallel execution\n')
+  console.log(`  3. 每一站做完會${G('自動提議下一棒')}（階段交接 hook）— 按一下就接，不必再打「分解」「跑管線」`)
+  console.log(D('     hook 只在 Claude Code 生效；其他平台仍走 skill 的軟提議（可攜不掉）\n'))
 }
 
 async function cmdContrib() {
