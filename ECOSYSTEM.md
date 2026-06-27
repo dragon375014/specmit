@@ -62,11 +62,11 @@ npx specmit init
 
 | Repo | Layer | Owns | Reach for it when |
 |---|---|---|---|
-| [spec-sonar](https://github.com/dragon375014/spec-sonar) | converge + decompose | `idea-to-spec`, `goal-decomposer`, Audit / Complex-System / Conflict-Analysis modes, project-scanner, 4 platform adapters | "I have a product idea" / "decompose this spec" / "audit this design for blind spots" |
+| [spec-sonar](https://github.com/dragon375014/spec-sonar) | converge + decompose | `idea-to-spec`, `goal-decomposer`, Audit / Complex-System / Conflict-Analysis modes, project-scanner, 4 platform adapters. **+ 2026-06: completeness baseline (archetype axis), Audit Mode security lens + audit→fix kickoff, capability-gated house-profile read, AskUserQuestion stage-handoff offers (ADR-002~006)** | "I have a product idea" / "decompose this spec" / "audit this design for blind spots" / "complete / security-scan an existing project" |
 | [goal-workflow-designer](https://github.com/dragon375014/goal-workflow-designer) | shape | `goal` (depth), `workflow-shaper` (breadth) | "one task done right" / "same check over many units" |
-| [claude-skills-governance-meta](https://github.com/dragon375014/claude-skills-governance-meta) | govern | `governance-guard` + `step-back-sentinel` templates, `architecture-completeness-guardian` + `trace-lock-modify` + `step-back-review` scaffold skills, adoption fitness check | "stop shipping the same class of bug" / "gate architecture changes" |
+| [claude-skills-governance-meta](https://github.com/dragon375014/claude-skills-governance-meta) | govern | `governance-guard` + `step-back-sentinel` templates, `architecture-completeness-guardian` + `trace-lock-modify` + `step-back-review` scaffold skills, adoption fitness check. **+ 2026-06: portable Supabase/web security-gate playbook (`playbooks/supabase-web-security-gate.md`, P0~P2 ruleset — the GOLD classes advisors miss)** | "stop shipping the same class of bug" / "gate architecture changes" / "the security ruleset Audit Mode's security lens scans against" |
 | [agent-work-board](https://github.com/dragon375014/agent-work-board) | coordinate | WORK-BOARD template, claim ritual, footprint methodology | "I run 2+ AI sessions in parallel on one repo" |
-| [specmit](https://github.com/dragon375014/specmit) | run + front door | this map, `PIPELINE-CONTRACT.md` (consumer contract pinning goal-graph 1.0), `idea-to-mvp` workflow runner, `specmit` bridge skill, the `specmit` npm CLI (`bin/`) | "run the whole spec→goals→execution pipeline in one command" / "where do I start?" |
+| [specmit](https://github.com/dragon375014/specmit) | run + front door | this map, `PIPELINE-CONTRACT.md` (consumer contract pinning goal-graph 1.0), `idea-to-mvp` workflow runner, `specmit` bridge skill, the `specmit` npm CLI (`bin/`). **+ 2026-06: deterministic stage-handoff hooks (`hooks/pipeline-stage-notifier.mjs`); `init` installs them into `.claude/` (ADR-007)** | "run the whole spec→goals→execution pipeline in one command" / "where do I start?" |
 
 The author also keeps a **private cross-project knowledge vault** (`reuse-hub`) — a `reuse-manifest` (which existing code to copy-fork) plus a `house-profile` (the author's default handling for recurring sharp-edges: media upload, payment callbacks, new-table grants, …). `goal-decomposer` **optionally** consumes a local house-profile through a **capability-gated slot** (`./.reuse/house-profile.json` ▸ `$HOUSE_PROFILE` ▸ neutral default) and bakes the values into the contracts it generates — public users without one simply get neutral defaults and a normal run (see spec-sonar `DESIGN-NOTES.md` ADR-003). The vault itself is not required by any workflow above; everything those workflows *need* lives in the public repos in this table.
 
@@ -76,6 +76,8 @@ The author also keeps a **private cross-project knowledge vault** (`reuse-hub`) 
 |---|---|---|
 | build a product from a vague idea | spec-sonar `idea-to-spec` | → `goal-decomposer` → execute goals in dependency order |
 | audit an existing design for blind spots | spec-sonar Audit Mode | → remediation goals → `goal-decomposer` |
+| **complete an existing project** (missing pages / media / reachability) | spec-sonar Audit Mode (archetype lens) | → triage fix-now (ADR-006) → `goal-decomposer` → execute |
+| **security-scan a Supabase / web project** | spec-sonar Audit Mode (security lens, ADR-005) | reads governance-meta security-gate playbook; warn-only; allowlist via house-profile |
 | get one task done deep and converged | goal-workflow-designer `goal` | paste the emitted `/goal` prompt |
 | run the same check/change across many units | goal-workflow-designer `workflow-shaper` | WORTH-IT gate first; paste the workflow prompt |
 | stop a recurring bug class | claude-skills-governance-meta | run the adoption fitness check, then copy a template |
@@ -90,6 +92,28 @@ The author also keeps a **private cross-project knowledge vault** (`reuse-hub`) 
 - spec stage: `idea-to-spec` **recommends** (never auto-installs) the governance skills when it calibrates a project as enterprise-complexity.
 - execution stage: every `idea-to-mvp` executor runs the host project's governance gates (`scripts/governance-guard.mjs`, `npm run audit:all`, architecture-gate skills under `.claude/skills/`) before declaring a goal done — a failing gate fails the goal.
 - coordination: when several sessions run pipelines on one repo, the work-board claim ritual prevents collisions; the runner's same-batch file-collision tripwire covers collisions *inside* one run.
+
+## The 2026-06 layer — new capabilities + cross-repo edges
+
+A round of work (recorded as **ADR-001 ~ 007** in spec-sonar `DESIGN-NOTES.md`) added a completeness + governance + handoff layer. The new **cross-repo edges** (relationships beyond the linear pipeline):
+
+```
+spec-sonar goal-decomposer ──reads (capability-gated)──▶ reuse-hub  house-profile.json   (ADR-003; private values, never leaked)
+spec-sonar Audit Mode (security lens) ──references──▶ governance-meta  supabase-web-security-gate.md   (ADR-005; public ruleset)
+specmit  init ──installs──▶ project .claude/  stage-handoff hooks   (ADR-007; deterministic offer, Claude-Code-only, soft offer is the portable fallback)
+Audit Mode A7 ──triage fix-now──▶ goal-decomposer ──▶ specmit   (ADR-006; brownfield "complete the project" loop)
+```
+
+What the layer adds, by theme:
+- **Completeness** (ADR-002): a per-deliverable-type *completeness baseline* (archetype axis) so the pipeline checks "does this *kind* of thing have what it should," not just internal consistency. Lives in `dark-zone-baseline.md`, so both from-zero (idea-to-spec) and brownfield (Audit Mode) get it.
+- **Private-knowledge injection** (ADR-003): public engine defines a `house-profile` *slot*; the private vault holds the *values*; goal-decomposer reads it if present, degrades to neutral defaults if not.
+- **Handoffs** (ADR-004 + 007): each stage proactively offers the next step (AskUserQuestion soft offer) — propose, don't auto-advance; a PostToolUse hook hardens the offer deterministically *in Claude Code only*, keeping portability.
+- **Security** (ADR-005): a portable Supabase/web security ruleset (governance-meta) + a warn-only Audit Mode lens that scans against it, with intentional-exception allowlists in the private house-profile.
+- **Audit→fix** (ADR-006): brownfield findings → triage (fix-now / roadmap / intentional) → human selects → decompose → run; high-blast-radius (RLS/grants/payments) goals stop for human SQL review.
+
+**The recurring law** all of these share: *capability-gated (detect the tool, not the identity) + public mechanism / private values + propose, don't auto-advance.*
+
+> ⚠️ **Known follow-up (`connector-needed`)**: the brownfield "complete an existing project" entry isn't yet auto-triggerable from a fresh `specmit init` — `modes/audit-mode.md` isn't in the install manifest, and no skill description matches "complete / audit this existing project." Until that's wired, the brownfield flow is reached by the agent reading Audit Mode from the spec-sonar repo directly.
 
 ## Canonical ownership — multi-copy skills
 
@@ -112,7 +136,7 @@ Three rules:
 
 - Sibling README `## Ecosystem` sections stay ≤ 10 lines and link here — topology details live in this file only.
 - New repo, or a repo changes role → update the pipeline diagram + tables here in the same PR.
-- Repos publish on `main`; until specmit ≥ 0.2.1 is the live npm version, keep `master` mirrored to `main` (the 0.2.0 CLI fetches raw files from `master`).
+- Repos publish on `main`; the `specmit` CLI (now ≥ 0.4.1 on npm) fetches raw skill files from each repo's `main`. `specmit sync` pulls the latest.
 - Known follow-ups are tracked as issues labeled `connector-needed`.
 
 ---
